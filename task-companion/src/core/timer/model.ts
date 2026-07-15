@@ -1,0 +1,53 @@
+export type TimerMode = 'focus-25' | 'focus-50' | 'custom';
+export type TimerCompletion = 'normal' | 'early';
+
+export interface IdleTimerState {
+	status: 'idle';
+}
+
+interface TimerSession {
+	sessionId: string;
+	mode: TimerMode;
+	durationSeconds: number;
+	startedAtMs: number;
+}
+
+export interface RunningTimerState extends TimerSession {
+	status: 'running';
+	endsAtMs: number;
+}
+
+export interface PausedTimerState extends TimerSession {
+	status: 'paused';
+	pausedAtMs: number;
+	remainingSeconds: number;
+}
+
+export interface FinishedTimerState extends TimerSession {
+	status: 'finished';
+	endedAtMs: number;
+	completion: TimerCompletion;
+}
+
+export type ActiveTimerState = RunningTimerState | PausedTimerState;
+export type TimerState =
+	| IdleTimerState
+	| RunningTimerState
+	| PausedTimerState
+	| FinishedTimerState;
+
+export interface StartTimerInput {
+	mode: TimerMode;
+	durationSeconds?: number;
+	nowMs: number;
+	sessionId: string;
+}
+
+export type TimerTransitionError =
+	| 'active-session'
+	| 'invalid-duration'
+	| 'invalid-state';
+
+export type TimerTransition =
+	| { ok: true; state: TimerState }
+	| { ok: false; state: TimerState; error: TimerTransitionError };

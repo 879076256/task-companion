@@ -51,8 +51,7 @@ test('plugin lifecycle registers a command and closes active modals on unload', 
 	);
 
 	assert.match(source, /this\.addCommand\(/);
-	assert.match(source, /for \(const modal of this\.activeModals\)/);
+	assert.match(source, /for \(const modal of Array\.from\(this\.activeModals\)\)/);
 	assert.match(source, /modal\.close\(\)/);
 	assert.match(source, /this\.activeModals\.clear\(\)/);
 });
-
