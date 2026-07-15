@@ -1,0 +1,6 @@
+.DS_Store
+task-companion/node_modules/
+task-companion/main.js
+task-companion/data.json
+task-companion/.obsidian/
+test-vault/.obsidian/

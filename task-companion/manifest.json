@@ -1,0 +1,10 @@
+{
+	"id": "task-companion",
+	"name": "Task Companion",
+	"version": "0.0.0",
+	"minAppVersion": "1.0.0",
+	"description": "Planning-stage skeleton for a local-first task companion.",
+	"author": "TBD",
+	"isDesktopOnly": false
+}
+

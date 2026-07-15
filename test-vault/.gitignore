@@ -1,0 +1,7 @@
+.obsidian/*
+!.obsidian/plugins/
+.obsidian/plugins/*
+!.obsidian/plugins/task-companion/
+.obsidian/plugins/task-companion/*
+!.obsidian/plugins/task-companion/.gitkeep
+
