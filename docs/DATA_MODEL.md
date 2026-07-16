@@ -1,27 +1,29 @@
-# 数据模型（概念草案 v1）
+# 数据模型（v2）
 
 > 当前没有持久化实现。本模型用于暴露需要确认的概念，不构成最终 schema。
 
 ## 候选实体
 
-### TaskRecord
+### TaskReference
 
 | 字段 | 候选含义 | 当前状态 |
 | --- | --- | --- |
-| `id` | 稳定任务标识 | 生成方式待确认 |
-| `text` | 用户可见任务文本 | 解析边界待确认 |
-| `status` | 未完成、完成或扩展状态 | 状态集合待确认 |
-| `sourcePath` | Vault 内相对文件路径 | 是否持久化待确认 |
-| `sourcePosition` | 原文位置或定位信息 | 稳定性策略待确认 |
-| `metadata` | 日期、优先级、标签等 | 语法待确认 |
+| `id` | `^tc-` 加六位小写十六进制稳定块 ID | Phase 3 已确定 |
+| `text` | 原任务复选框后的用户可见文本 | Phase 3 已实现 |
+| `sourcePath` | Vault 内相对 Markdown 路径 | 仅运行时使用 |
+| `lineNumber` | 本次扫描定位提示 | 不作为长期 ID |
+| `priority` | `⏫`、`🔼`、`🔽`、`⏬` 或空 | Phase 3 已实现 |
+| `hasRecurrence` | 是否包含 `🔁` | Phase 3 已实现 |
+| `start` / `scheduled` / `due` | 有效 `YYYY-MM-DD` 或空 | Phase 3 已实现 |
+| `category` | today / important / today-important / recurring | 运行时派生 |
 
 ### SourceRef
 
-候选用于定位任务原文，可能由 Vault 内相对路径、内容指纹和位置提示组成。不得包含 Vault 外绝对路径；冲突解决策略待确认。
+运行时使用 Vault 相对路径、扫描行号和原始行精确定位；长期关联只使用稳定块 ID。写入前比较完整文件与原行，冲突时不写入。
 
 ### PluginSettings
 
-候选仅保存用户明确选择的扫描范围、解析规则和界面偏好。当前不创建 `data.json`，也不定义正式设置项。
+插件 `data.json` 保存基础设置、短期计时状态和当前选中的稳定 `taskId`。不保存任务正文或长期执行历史。
 
 ### TimerState
 
@@ -38,7 +40,7 @@
 
 ## 数据流边界
 
-Phase 2 的实际数据流仅为：Modal 控制输入 → 内存计时状态 → 插件 `data.json` → status 文本节点与可选本机提醒。无 Vault 内容读取或写入。后续任何任务或笔记读写仍必须先明确授权范围、失败策略和验收用例。
+Phase 3 数据流为：用户打开选择器 → 扫描当前 Vault Markdown → 纯规则筛选 → 安全追加缺失的稳定 ID → 选择任务 → `data.json` 保存当前 `taskId` → 打开 Phase 2 计时器。除稳定 ID 外不修改任务文本。
 
 ## 隐私与安全
 

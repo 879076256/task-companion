@@ -10,7 +10,7 @@
 		"typecheck": "tsc --noEmit --skipLibCheck",
 		"lint": "eslint .",
 		"test": "npm run test:unit && npm run test:test-vault",
-		"test:unit": "node --test tests/skeleton.test.mjs tests/core.test.mjs tests/timer-state-machine.test.mjs",
+		"test:unit": "node --test tests/skeleton.test.mjs tests/core.test.mjs tests/timer-state-machine.test.mjs tests/task-rules.test.mjs tests/task-scanner.test.mjs",
 		"test:test-vault": "npm run build && npm run install:test-vault && node --test tests/test-vault.test.mjs",
 		"install:test-vault": "node scripts/install-test-vault.mjs",
 		"check": "npm run build && npm run lint && npm test",

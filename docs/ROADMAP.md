@@ -2,40 +2,25 @@
 
 ## Phase 0：安全环境、架构与文档（已完成）
 
-- 独立 Git 仓库与目录边界。
-- 完整长期文档（PRODUCT、TASK_RULES、DATA_MODEL、ACCEPTANCE、DECISIONS 等）。
-- 官方 Sample Plugin 基线与质量命令。
-- 测试 Vault 任务样例覆盖主要任务状态。
-- 正式 Vault 未被访问或修改。
+独立仓库、测试 Vault、长期文档和安全边界已建立。
 
 ## Phase 1：插件骨架与工程基线（已完成）
 
-- `core`、`adapters`、`ui`、`services`、`settings` 五层源码目录。
-- 实现 `onload`/`onunload`、测试命令、简单 Modal、基础设置项和错误日志。
-- production build 可安装到仓库内 `test-vault/`。
-- build、typecheck、lint、unit tests 全部通过。
+插件生命周期、设置、测试命令、Modal、日志和质量命令已建立。
 
-## Phase 2：可靠计时器与状态组件（已完成，待人工验收）
+## Phase 2：可靠计时器与状态组件（已完成）
 
-- Core 层纯 TypeScript 计时状态机（idle / running / paused / finished）。
-- 支持 25 分钟、50 分钟、自由计时、开始、暂停、继续、正常完成、提前结束、重置。
-- 绝对时间戳计算，暂停时保存 remainingSeconds。
-- 同一时间只允许一个活动会话。
-- 短期计时状态持久化到插件 data.json。
-- Obsidian 重载后状态恢复。
-- 可选系统通知和声音提醒（失败不影响核心）。
-- 注册 `taskcompanion` 自定义代码块（`view: status`）。
-- 计时控制 Modal。
-- 多个 status 组件共享同一计时服务并同步更新。
-- 状态机单元测试 10/10 通过。
+用户已确认 Phase 2 完成；计时状态机、重载恢复、控制 Modal 和 `status` 代码块保留。
 
-## Phase 3：正式任务识别与任务选择（未开始）
+## Phase 3：正式任务识别与任务选择（已完成）
 
-- 扫描 Vault 中的 Tasks 任务。
-- 正式任务过滤（⏫🔼🔽⏬🔁）。
-- 今日待办、重点任务、去重。
-- 稳定任务 ID。
-- 任务选择 Modal 并绑定计时器。
+- 正式任务过滤与七条今日规则。
+- 重点、今日＋重点和日常任务分类去重。
+- 稳定块 ID、安全冲突检测与失败隔离。
+- 支持搜索、刷新、来源跳转和母任务绑定的选择 Modal。
+- 当前 taskId 与短期计时状态持久化。
+- 20 个单元/结构测试及测试 Vault 构建校验通过。
+- 测试 Vault 人工验收通过：来源跳转、任务绑定、计时控制重开与切换保护正常。
 
 ## Phase 4：执行会话、进展记录与当前下一步（未开始）
 

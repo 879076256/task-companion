@@ -21,9 +21,11 @@ export type TimerListener = (state: TimerState) => void;
 
 export class TimerService {
 	private state: TimerState = createIdleState();
-	private intervalId: ReturnType<typeof setInterval> | null = null;
+	private intervalId: number | null = null;
 	private readonly listeners = new Set<TimerListener>();
 	private readonly logger: ErrorLogger;
+	private currentTaskId: string | null = null;
+	private persistenceHook: (() => void) | null = null;
 
 	constructor(logger: ErrorLogger) {
 		this.logger = logger;
@@ -35,6 +37,29 @@ export class TimerService {
 
 	getRemainingSeconds(nowMs: number): number {
 		return getRemainingSeconds(this.state, nowMs);
+	}
+
+	getTaskId(): string | null {
+		return this.currentTaskId;
+	}
+
+	bindTask(taskId: string): void {
+		if (!/^\^tc-[0-9a-f]{6}$/u.test(taskId)) {
+			throw new Error('Invalid Task Companion task ID.');
+		}
+		this.currentTaskId = taskId;
+		this.requestPersistence();
+	}
+
+	restoreTaskId(taskId: unknown): void {
+		this.currentTaskId =
+			typeof taskId === 'string' && /^\^tc-[0-9a-f]{6}$/u.test(taskId)
+				? taskId
+				: null;
+	}
+
+	onPersistenceRequested(hook: () => void): void {
+		this.persistenceHook = hook;
 	}
 
 	subscribe(listener: TimerListener): () => void {
@@ -56,6 +81,7 @@ export class TimerService {
 			this.state = result.state;
 			this.startTicking();
 			this.notifyAll();
+			this.requestPersistence();
 		}
 		return result;
 	}
@@ -66,6 +92,7 @@ export class TimerService {
 			this.state = result.state;
 			this.stopTicking();
 			this.notifyAll();
+			this.requestPersistence();
 		}
 		return result;
 	}
@@ -76,6 +103,7 @@ export class TimerService {
 			this.state = result.state;
 			this.startTicking();
 			this.notifyAll();
+			this.requestPersistence();
 		}
 		return result;
 	}
@@ -86,6 +114,7 @@ export class TimerService {
 			this.state = result.state;
 			this.stopTicking();
 			this.notifyAll();
+			this.requestPersistence();
 		}
 		return result;
 	}
@@ -94,6 +123,7 @@ export class TimerService {
 		this.state = resetTimer(this.state);
 		this.stopTicking();
 		this.notifyAll();
+		this.requestPersistence();
 	}
 
 	/** Called on plugin load to restore persisted state */
@@ -116,17 +146,19 @@ export class TimerService {
 	dispose(): void {
 		this.stopTicking();
 		this.listeners.clear();
+		this.persistenceHook = null;
 	}
 
 	private startTicking(): void {
 		if (this.intervalId !== null) return;
-		this.intervalId = setInterval(() => {
+		this.intervalId = window.setInterval(() => {
 			const now = Date.now();
 			const reconciled = reconcileTimer(this.state, now);
 			if (reconciled !== this.state) {
 				this.state = reconciled;
 				this.stopTicking();
 				this.notifyAll();
+				this.requestPersistence();
 				return;
 			}
 			this.notifyAll();
@@ -135,7 +167,7 @@ export class TimerService {
 
 	private stopTicking(): void {
 		if (this.intervalId !== null) {
-			clearInterval(this.intervalId);
+			window.clearInterval(this.intervalId);
 			this.intervalId = null;
 		}
 	}
@@ -148,5 +180,13 @@ export class TimerService {
 				this.logger.capture('timer listener', error);
 			}
 		});
+	}
+
+	private requestPersistence(): void {
+		try {
+			this.persistenceHook?.();
+		} catch (error) {
+			this.logger.capture('timer persistence request', error);
+		}
 	}
 }

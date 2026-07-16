@@ -29,10 +29,10 @@ function renderStatus(
 	container: HTMLElement,
 	timer: TimerService,
 ): void {
-	const timeEl = container.createEl('div', {
+	const timeEl = container.createDiv({
 		cls: 'taskcompanion-time',
 	});
-	const labelEl = container.createEl('div', {
+	const labelEl = container.createDiv({
 		cls: 'taskcompanion-label',
 	});
 

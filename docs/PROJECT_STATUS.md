@@ -1,51 +1,43 @@
 # 项目状态
 
-- **阶段**：Phase 2 — 可靠计时器与状态组件，待人工验收
-- **分支**：`phase-2-timer`（未合并 `main`）
-- **功能状态**：计时状态机、代码块嵌入、计时控制 Modal；无任务功能
-- **数据状态**：短期计时持久化到 data.json；无真实 Vault 内容写入
-- **测试状态**：构建产物已安装到仓库内 `test-vault/`
-- **发布状态**：未安装到正式 Vault、未发布
-- **质量状态**：build、typecheck、lint、unit tests（10/10）全部通过（2026-07-16）
+- **阶段**：Phase 3 重做 — 已完成并通过人工验收
+- **分支**：`codex/phase-3-task-selection-redo`（基于 `v0.2.0-timer`，未合并 main）
+- **功能状态**：计时器＋正式任务识别＋安全稳定 ID＋任务选择和母任务绑定
+- **数据状态**：仅稳定 ID 写入任务行；当前 taskId 和计时状态保存到 data.json
+- **测试数据**：仅仓库内 `test-vault/Phase 3 Tasks.md` 人造任务
+- **正式 Vault**：未访问、未安装、未修改
+- **质量状态**：build、typecheck、lint、20 个单元/结构测试、测试 Vault 产物校验全部通过（2026-07-16）
 
-## Phase 2 实现
+## Phase 3 实现
 
-### Core 层
-- `src/core/timer/model.ts` — TimerState 联合类型（idle/running/paused/finished）、TimerMode、StartTimerInput
-- `src/core/timer/state-machine.ts` — 纯函数状态机（start/pause/resume/finishEarly/reset/reconcile/getRemainingSeconds）
-- `src/core/timer/serialization.ts` — 持久化恢复与校验
+- `src/core/tasks/task-rules.ts`：解析、正式任务过滤、日期规则、重点/日常分类和去重。
+- `src/core/tasks/task-id.ts`：稳定 ID 验证、提取、追加和防碰撞生成。
+- `src/adapters/tasks/task-scanner.ts`：逐文件扫描、完整内容/原行校验、失败隔离。
+- `src/adapters/obsidian/obsidian-task-vault.ts`：Obsidian Vault 的最小访问适配。
+- `src/ui/task-selection-modal.ts`：搜索、刷新、分类、日期、来源和选择操作。
+- `src/main.ts`：注册选择命令、打开来源、绑定母任务、活动计时切换保护。
 
-### 服务层
-- `src/services/timer-service.ts` — 单例计时服务，包装状态机，管理订阅通知，interval 驱动每秒更新
+## 安全与兼容性
 
-### UI 层
-- `src/ui/status-code-block.ts` — `taskcompanion` 代码块处理器（`view: status`）
-- `src/ui/timer-control-modal.ts` — 计时控制 Modal（模式选择、开始、暂停、继续、结束、重置）
-- `src/ui/status-modal.ts` — 保留 Phase 1 测试 Modal
+- 扫描由用户命令显式触发，无后台监听或轮询。
+- 通知只显示失败数量，不包含任务正文。
+- 使用 `Vault.process` 做安全读改写，因此最低 Obsidian 版本从 1.0.0 准确提升到 1.1.0。
+- Phase 4 ExecutionSession 代码未进入本分支。
 
-### 设置
-- `src/settings/model.ts` — 保留 `showTechnicalDetails`
-- `src/settings/settings-tab.ts` — 保留 Phase 1 设置页
+## 人工验收结果
 
-### 主入口
-- `src/main.ts` — 初始化 TimerService，注册状态恢复、代码块、计时命令和设置
+- 已在仓库内测试 Vault 启用插件。
+- 分类、搜索、刷新、稳定 ID 写入与来源跳转通过。
+- 选择任务、计时控制重开和活动计时切换保护通过。
+- 人工验收发现的两个问题已修复并增加回归测试。
 
-### 测试
-- `tests/timer-state-machine.test.mjs` — 10 个测试，覆盖所有状态转换路径
-- `tests/skeleton.test.mjs` — 5 个测试（更新）
-- `tests/core.test.mjs` — 2 个测试
+## 发布状态
 
-## 卸载与清理
+- Phase 3 重做版本计划提交到 `codex/phase-3-task-selection-redo`。
+- 旧标签 `v0.3.0-task-selection` 保留作为历史错误实现，不移动。
+- 本次正确版本使用 `v0.3.1-task-selection`。
 
-- TimerService.dispose() 清除 interval 和订阅者
-- onunload 遍历 activeModals 逐个关闭
+## 人工验收修复
 
-## 当前风险与待验收项
-
-- 尚未在 Obsidian UI 内人工启用测试 Vault 验证计时器和代码块
-- 系统通知和声音提醒尚未实现（容错空实现）
-- 计时控制 Modal 外观尚需打磨
-
-## 下一决策点
-
-人工验收 Phase 2 后，再决定是否批准 Phase 3。未确认前停止开发。
+- 来源跳转成功后关闭选择器，确保来源笔记不会被 Modal 遮挡。
+- 活动计时期间点击当前母任务会重新打开计时控制；只有其他任务被拒绝。

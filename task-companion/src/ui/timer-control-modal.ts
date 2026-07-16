@@ -9,23 +9,34 @@ export class TimerControlModal extends Modal {
 	private statusEl!: HTMLElement;
 	private unsubscribe: (() => void) | null = null;
 
-	constructor(app: App, timer: TimerService) {
+	constructor(
+		app: App,
+		timer: TimerService,
+		private readonly taskLabel: string | null = null,
+		private readonly onClosed: () => void = () => undefined,
+	) {
 		super(app);
 		this.timer = timer;
-		this.setTitle('Task Companion — 计时控制');
+		this.setTitle('Task companion — 计时控制');
 	}
 
 	onOpen(): void {
 		const { contentEl } = this;
+		if (this.taskLabel) {
+			contentEl.createEl('p', {
+				text: `当前任务：${this.taskLabel}`,
+				cls: 'taskcompanion-current-task',
+			});
+		}
 
 		// Time display
-		this.timeEl = contentEl.createEl('div', {
+		this.timeEl = contentEl.createDiv({
 			cls: 'taskcompanion-time',
 			attr: { style: 'font-size:2.5em;text-align:center;font-variant-numeric:tabular-nums;margin:1em 0;' },
 		});
 
 		// Status label
-		this.statusEl = contentEl.createEl('div', {
+		this.statusEl = contentEl.createDiv({
 			cls: 'taskcompanion-label',
 			attr: { style: 'text-align:center;margin-bottom:1em;' },
 		});
@@ -114,6 +125,7 @@ export class TimerControlModal extends Modal {
 			this.unsubscribe = null;
 		}
 		this.contentEl.empty();
+		this.onClosed();
 	}
 
 	private updateDisplay(state: TimerState): void {
