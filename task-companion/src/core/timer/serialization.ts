@@ -68,6 +68,7 @@ function readSession(value: Record<string, unknown>): {
 	durationSeconds: number;
 	startedAtMs: number;
 	pausedDurationMs: number;
+	subtaskId: string | null;
 } | null {
 	if (
 		typeof value.sessionId !== 'string' ||
@@ -85,6 +86,10 @@ function readSession(value: Record<string, unknown>): {
 		startedAtMs: value.startedAtMs,
 		pausedDurationMs:
 			isTimestamp(value.pausedDurationMs) ? value.pausedDurationMs : 0,
+		subtaskId:
+			typeof value.subtaskId === 'string' && value.subtaskId.length > 0
+				? value.subtaskId
+				: null,
 	};
 }
 

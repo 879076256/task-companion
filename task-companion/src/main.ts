@@ -1,10 +1,12 @@
 import { Modal, Notice, Plugin, TFile } from 'obsidian';
 import { ConsoleLogSink } from './adapters/console-log-sink';
 import { ObsidianSessionVault } from './adapters/obsidian/obsidian-session-vault';
+import { ObsidianSubtaskVault } from './adapters/obsidian/obsidian-subtask-vault';
 import { ObsidianTaskVault } from './adapters/obsidian/obsidian-task-vault';
 import { TaskScanner } from './adapters/tasks/task-scanner';
 import {
 	PLUGIN_NAME,
+	MANAGE_SUBTASKS_COMMAND_ID,
 	QUICK_PROGRESS_COMMAND_ID,
 	RETRY_SESSION_WRITES_COMMAND_ID,
 	SELECT_TASK_COMMAND_ID,
@@ -22,6 +24,8 @@ import { resolveTaskSelectionAction } from './core/tasks/task-selection';
 import { ErrorLogger } from './services/error-logger';
 import { SessionRepository } from './services/session-repository';
 import { SessionService } from './services/session-service';
+import { SubtaskRepository } from './services/subtask-repository';
+import { SubtaskService } from './services/subtask-service';
 import { TimerService } from './services/timer-service';
 import {
 	DEFAULT_SETTINGS,
@@ -30,8 +34,10 @@ import {
 } from './settings/model';
 import { TaskCompanionSettingTab } from './settings/settings-tab';
 import { StatusModal } from './ui/status-modal';
+import { ExecutionTargetModal } from './ui/execution-target-modal';
 import { SessionHistoryModal } from './ui/session-history-modal';
 import { SessionReflectionModal } from './ui/session-reflection-modal';
+import { SubtaskManagerModal } from './ui/subtask-manager-modal';
 import { TimerControlModal } from './ui/timer-control-modal';
 import { registerStatusCodeBlock } from './ui/status-code-block';
 import { TaskSelectionModal } from './ui/task-selection-modal';
@@ -44,6 +50,7 @@ export default class TaskCompanionPlugin extends Plugin {
 	private timerService: TimerService | null = null;
 	private taskScanner: TaskScanner | null = null;
 	private sessionService: SessionService | null = null;
+	private subtaskService: SubtaskService | null = null;
 	private saveChain: Promise<void> = Promise.resolve();
 
 	async onload(): Promise<void> {
@@ -56,11 +63,15 @@ export default class TaskCompanionPlugin extends Plugin {
 				new SessionRepository(new ObsidianSessionVault(this.app.vault)),
 				(pending) => this.savePluginData(pending),
 			);
+			this.subtaskService = new SubtaskService(
+				new SubtaskRepository(new ObsidianSubtaskVault(this.app.vault)),
+			);
 
 			// Restore task identity before timer state so an expired timer can be logged.
 			if (isRecord(saved)) {
 				this.sessionService.restorePending(saved.pendingSessionWrites);
 				this.timerService.restoreTaskId(saved.selectedTaskId);
+				this.timerService.restoreSubtaskId(saved.selectedSubtaskId);
 			}
 			if (this.sessionService.getPending().length > 0) {
 				new Notice('Task companion 有待写入会话，正在重试。');
@@ -87,6 +98,19 @@ export default class TaskCompanionPlugin extends Plugin {
 				id: TEST_COMMAND_ID,
 				name: 'Open test modal',
 				callback: () => this.openStatusModal(),
+			});
+
+			this.addCommand({
+				id: MANAGE_SUBTASKS_COMMAND_ID,
+				name: 'Manage subtasks',
+				callback: () => {
+					const taskId = this.timerService?.getTaskId() ?? null;
+					if (!taskId) {
+						new Notice('请先选择一个母任务。');
+						return;
+					}
+					this.openSubtaskManager(taskId);
+				},
 			});
 
 			this.addCommand({
@@ -186,9 +210,30 @@ export default class TaskCompanionPlugin extends Plugin {
 	): Promise<void> {
 		if (!this.timerService) return;
 		let nextAction: string | null = null;
+		let executionTargetLabel: string | null = this.timerService.getSubtaskId()
+			? '已绑定子任务'
+			: '母任务';
+		let progress = null;
 		if (taskId && this.sessionService) {
 			try {
-				nextAction = await this.sessionService.getCurrentNextAction(taskId);
+				const sessions = await this.sessionService.history(taskId);
+				if (this.subtaskService) {
+					progress = await this.subtaskService.progress(taskId, sessions);
+					nextAction = progress.currentNextTitle;
+					const selectedSubtaskId = this.timerService.getSubtaskId();
+					const selectedSubtask = progress.subtasks.find(
+						(subtask) => subtask.subtaskId === selectedSubtaskId,
+					);
+					if (selectedSubtask?.status === 'active') {
+						executionTargetLabel = selectedSubtask.title;
+					} else if (selectedSubtaskId !== null) {
+						this.timerService.bindSubtask(null);
+						await this.saveSettings();
+					}
+				}
+				if (!nextAction) {
+					nextAction = await this.sessionService.getCurrentNextAction(taskId);
+				}
 			} catch (error) {
 				this.logger.capture('current next action read', error);
 				new Notice('当前下一步读取失败；仍可继续计时。');
@@ -199,6 +244,9 @@ export default class TaskCompanionPlugin extends Plugin {
 			this.timerService,
 			taskLabel,
 			nextAction,
+			executionTargetLabel,
+			progress,
+			taskId ? () => this.openSubtaskManager(taskId) : null,
 			() => this.activeModals.delete(modal),
 		);
 		this.activeModals.add(modal);
@@ -231,22 +279,79 @@ export default class TaskCompanionPlugin extends Plugin {
 			return true;
 		}
 		this.timerService.bindTask(selected.task.id);
-		await this.saveSettings();
-		await this.openTimerModal(
-			removeTrailingTaskId(selected.task.text),
-			selected.task.id,
-		);
+		await this.chooseExecutionTarget(selected, 'timer');
 		return true;
 	}
 
 	private async recordQuickProgress(selected: SelectedTask): Promise<boolean> {
+		await this.chooseExecutionTarget(selected, 'quick');
+		return true;
+	}
+
+	private async recordQuickProgressForTarget(
+		selected: SelectedTask,
+		subtaskId: string | null,
+	): Promise<void> {
 		const session = createQuickExecutionSession(
 			selected.task.id,
 			Date.now(),
 			crypto.randomUUID(),
+			subtaskId,
 		);
 		await this.handleCompletedSession(session);
-		return true;
+	}
+
+	private async chooseExecutionTarget(
+		selected: SelectedTask,
+		intent: 'timer' | 'quick',
+	): Promise<void> {
+		if (!this.subtaskService || !this.timerService) return;
+		const plan = await this.subtaskService.load(selected.task.id);
+		const activeSubtasks = plan.subtasks.filter(
+			(subtask) => subtask.status === 'active',
+		);
+		const execute = async (subtaskId: string | null): Promise<void> => {
+			if (intent === 'quick') {
+				await this.recordQuickProgressForTarget(selected, subtaskId);
+				return;
+			}
+			this.timerService?.bindSubtask(subtaskId);
+			await this.saveSettings();
+			await this.openTimerModal(
+				removeTrailingTaskId(selected.task.text),
+				selected.task.id,
+			);
+		};
+		if (activeSubtasks.length === 0) {
+			await execute(null);
+			return;
+		}
+		const modal = new ExecutionTargetModal(
+			this.app,
+			plan,
+			intent === 'quick' ? '快速推进' : '打开计时',
+			execute,
+			() => this.activeModals.delete(modal),
+		);
+		this.activeModals.add(modal);
+		modal.open();
+	}
+
+	private openSubtaskManager(taskId: string): void {
+		if (!this.subtaskService || !this.sessionService) return;
+		const modal = new SubtaskManagerModal(
+			this.app,
+			taskId,
+			this.subtaskService,
+			() => this.sessionService?.history(taskId) ?? Promise.resolve([]),
+			() => {
+				const state = this.timerService?.getState();
+				return state?.status === 'running' || state?.status === 'paused';
+			},
+			() => this.activeModals.delete(modal),
+		);
+		this.activeModals.add(modal);
+		modal.open();
 	}
 
 	private async handleCompletedSession(session: ExecutionSession): Promise<void> {
@@ -310,6 +415,8 @@ export default class TaskCompanionPlugin extends Plugin {
 		if (timerState !== null) data.timerState = timerState;
 		const selectedTaskId = this.timerService?.getTaskId() ?? null;
 		if (selectedTaskId) data.selectedTaskId = selectedTaskId;
+		const selectedSubtaskId = this.timerService?.getSubtaskId() ?? null;
+		if (selectedSubtaskId) data.selectedSubtaskId = selectedSubtaskId;
 		if (pendingSessionWrites.length > 0) {
 			data.pendingSessionWrites = pendingSessionWrites;
 		}

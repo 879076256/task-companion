@@ -5,3 +5,4 @@ export const SELECT_TASK_COMMAND_ID = 'select-task-for-timer';
 export const QUICK_PROGRESS_COMMAND_ID = 'record-quick-progress';
 export const SESSION_HISTORY_COMMAND_ID = 'open-session-history';
 export const RETRY_SESSION_WRITES_COMMAND_ID = 'retry-session-writes';
+export const MANAGE_SUBTASKS_COMMAND_ID = 'manage-subtasks';

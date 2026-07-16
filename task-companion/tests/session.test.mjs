@@ -23,9 +23,10 @@ const serviceModule = await loadModule('../src/services/session-service.ts');
 
 function makeSession(overrides = {}) {
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		sessionId: 'session-1',
 		taskId: '^tc-aabbcc',
+		subtaskId: null,
 		startedAt: '2026-07-16T00:00:00.000Z',
 		endedAt: '2026-07-16T00:25:00.000Z',
 		activeDurationSeconds: 1_500,
@@ -70,6 +71,7 @@ test('timer and quick progress create complete, unique ExecutionSession records'
 			startedAtMs: 1_000,
 			endedAtMs: 3_021_000,
 			pausedDurationMs: 20_000,
+			subtaskId: 'subtask-timed',
 			completion: 'normal',
 		},
 		'^tc-aabbcc',
@@ -78,13 +80,16 @@ test('timer and quick progress create complete, unique ExecutionSession records'
 		'^tc-aabbcc',
 		4_000,
 		'quick-unique',
+		'subtask-quick',
 	);
 
 	assert.equal(timed.activeDurationSeconds, 3_000);
 	assert.equal(timed.pausedDurationSeconds, 20);
+	assert.equal(timed.subtaskId, 'subtask-timed');
 	assert.equal(timed.mode, 'focus-50');
 	assert.equal(quick.mode, 'quick');
 	assert.equal(quick.activeDurationSeconds, 0);
+	assert.equal(quick.subtaskId, 'subtask-quick');
 	assert.notEqual(timed.sessionId, quick.sessionId);
 });
 
@@ -98,6 +103,7 @@ test('early completion excludes accumulated paused time', () => {
 			startedAtMs: 10_000,
 			endedAtMs: 100_000,
 			pausedDurationMs: 30_000,
+			subtaskId: null,
 			completion: 'early',
 		},
 		'^tc-aabbcc',
@@ -119,11 +125,19 @@ test('JSONL reader isolates invalid lines and migrates schema version 0', () => 
 		status: 'early',
 		endedEarly: undefined,
 	};
+	const versionOne = {
+		...makeSession({ sessionId: 'version-one' }),
+		schemaVersion: 1,
+		subtaskId: undefined,
+	};
 	const result = codec.parseSessionLog(
-		`${JSON.stringify(legacy)}\nnot-json\n${JSON.stringify(makeSession({ sessionId: 'valid' }))}\n`,
+		`${JSON.stringify(legacy)}\nnot-json\n${JSON.stringify(versionOne)}\n${JSON.stringify(makeSession({ sessionId: 'valid' }))}\n`,
 	);
-	assert.equal(result.sessions.length, 2);
-	assert.equal(result.sessions[0].schemaVersion, 1);
+	assert.equal(result.sessions.length, 3);
+	assert.equal(result.sessions[0].schemaVersion, 2);
+	assert.equal(result.sessions[0].subtaskId, null);
+	assert.equal(result.sessions[1].schemaVersion, 2);
+	assert.equal(result.sessions[1].subtaskId, null);
 	assert.equal(result.sessions[0].endedEarly, true);
 	assert.deepEqual(result.invalidLineNumbers, [2]);
 });

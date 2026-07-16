@@ -7,3 +7,4 @@
 
 # Runtime execution logs are local acceptance evidence, not repository fixtures.
 TaskCompanion/Sessions/*.jsonl
+TaskCompanion/Subtasks/*.jsonl

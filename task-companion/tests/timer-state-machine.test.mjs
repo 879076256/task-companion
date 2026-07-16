@@ -34,6 +34,7 @@ test('starts a 25 minute timer using an absolute end timestamp', () => {
 		durationSeconds: 1_500,
 		startedAtMs: 1_000,
 		pausedDurationMs: 0,
+		subtaskId: null,
 		endsAtMs: 1_501_000,
 	});
 	assert.equal(machine.getRemainingSeconds(result.state, 1_601), 1_500);
@@ -122,6 +123,26 @@ test('rejects duplicate starts while running or paused', () => {
 			sessionId: 'three',
 		}).ok,
 		false,
+	);
+});
+
+test('subtask binding is immutable across pause, resume and completion', () => {
+	const running = machine.startTimer(machine.createIdleState(), {
+		mode: 'custom',
+		durationSeconds: 120,
+		nowMs: 1_000,
+		sessionId: 'bound',
+		subtaskId: 'subtask-bound',
+	}).state;
+	const paused = machine.pauseTimer(running, 31_000).state;
+	const resumed = machine.resumeTimer(paused, 61_000).state;
+	const finished = machine.finishTimerEarly(resumed, 91_000).state;
+	assert.equal(paused.subtaskId, 'subtask-bound');
+	assert.equal(resumed.subtaskId, 'subtask-bound');
+	assert.equal(finished.subtaskId, 'subtask-bound');
+	assert.equal(
+		serialization.restoreTimerState(resumed, 70_000).subtaskId,
+		'subtask-bound',
 	);
 });
 

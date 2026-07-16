@@ -2,6 +2,7 @@ import { App, Modal, Notice, Setting } from 'obsidian';
 import { TimerService } from '../services/timer-service';
 import { TimerMode, TimerState } from '../core/timer/model';
 import { getRemainingSeconds } from '../core/timer/state-machine';
+import type { TaskProgressSummary } from '../core/subtasks/progress';
 
 export class TimerControlModal extends Modal {
 	private readonly timer: TimerService;
@@ -14,6 +15,9 @@ export class TimerControlModal extends Modal {
 		timer: TimerService,
 		private readonly taskLabel: string | null = null,
 		private readonly nextAction: string | null = null,
+		private readonly executionTargetLabel: string | null = null,
+		private readonly progress: TaskProgressSummary | null = null,
+		private readonly onManageSubtasks: (() => void) | null = null,
 		private readonly onClosed: () => void = () => undefined,
 	) {
 		super(app);
@@ -34,6 +38,27 @@ export class TimerControlModal extends Modal {
 				text: `当前下一步：${this.nextAction}`,
 				cls: 'taskcompanion-next-action',
 			});
+		}
+		if (this.executionTargetLabel) {
+			contentEl.createEl('p', { text: `本次执行：${this.executionTargetLabel}` });
+		}
+		if (this.progress) {
+			const parts = [
+				this.progress.totalSubtasks > 0
+					? `子任务 ${this.progress.completedSubtasks} / ${this.progress.totalSubtasks}`
+					: null,
+				`累计 ${this.progress.totalSessionCount} 次执行`,
+				`总投入 ${formatDuration(this.progress.totalActiveDurationSeconds)}`,
+			].filter((value): value is string => value !== null);
+			contentEl.createEl('p', { text: parts.join(' · ') });
+		}
+		if (this.onManageSubtasks) {
+			new Setting(contentEl).addButton((button) =>
+				button.setButtonText('管理任务拆解').onClick(() => {
+					this.close();
+					this.onManageSubtasks?.();
+				}),
+			);
 		}
 
 		// Time display
@@ -179,4 +204,10 @@ export class TimerControlModal extends Modal {
 				break;
 		}
 	}
+}
+
+function formatDuration(seconds: number): string {
+	const hours = Math.floor(seconds / 3_600);
+	const minutes = Math.floor((seconds % 3_600) / 60);
+	return hours > 0 ? `${hours} 小时 ${minutes} 分钟` : `${minutes} 分钟`;
 }

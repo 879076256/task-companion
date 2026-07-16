@@ -1,6 +1,6 @@
 import type { FinishedTimerState, TimerMode } from '../timer/model';
 
-export const SESSION_SCHEMA_VERSION = 1;
+export const SESSION_SCHEMA_VERSION = 2;
 
 export type ExecutionMode = TimerMode | 'quick';
 export type ExecutionStatus = 'completed' | 'ended-early';
@@ -9,6 +9,7 @@ export interface ExecutionSession {
 	schemaVersion: typeof SESSION_SCHEMA_VERSION;
 	sessionId: string;
 	taskId: string;
+	subtaskId: string | null;
 	startedAt: string;
 	endedAt: string;
 	activeDurationSeconds: number;
@@ -43,6 +44,7 @@ export function executionSessionFromTimer(
 		schemaVersion: SESSION_SCHEMA_VERSION,
 		sessionId: state.sessionId,
 		taskId,
+		subtaskId: state.subtaskId,
 		startedAt: new Date(state.startedAtMs).toISOString(),
 		endedAt: new Date(state.endedAtMs).toISOString(),
 		activeDurationSeconds,
@@ -60,12 +62,14 @@ export function createQuickExecutionSession(
 	taskId: string,
 	nowMs: number,
 	sessionId: string,
+	subtaskId: string | null = null,
 ): ExecutionSession {
 	const timestamp = new Date(nowMs).toISOString();
 	return {
 		schemaVersion: SESSION_SCHEMA_VERSION,
 		sessionId,
 		taskId,
+		subtaskId,
 		startedAt: timestamp,
 		endedAt: timestamp,
 		activeDurationSeconds: 0,
@@ -98,6 +102,7 @@ export function normalizeExecutionSession(value: unknown): ExecutionSession | nu
 		migrated.schemaVersion !== SESSION_SCHEMA_VERSION ||
 		!isNonEmptyString(migrated.sessionId) ||
 		!/^\^tc-[0-9a-f]{6}$/u.test(String(migrated.taskId)) ||
+		!isNullableSubtaskId(migrated.subtaskId) ||
 		!isIsoTimestamp(migrated.startedAt) ||
 		!isIsoTimestamp(migrated.endedAt) ||
 		!isNonNegativeInteger(migrated.activeDurationSeconds) ||
@@ -115,24 +120,33 @@ export function normalizeExecutionSession(value: unknown): ExecutionSession | nu
 }
 
 function migrateLegacySession(value: Record<string, unknown>): Record<string, unknown> {
-	if (value.schemaVersion !== 0) return value;
-	return {
-		...value,
-		schemaVersion: SESSION_SCHEMA_VERSION,
-		startedAt:
-			typeof value.startedAtMs === 'number'
-				? new Date(value.startedAtMs).toISOString()
-				: value.startedAt,
-		endedAt:
-			typeof value.endedAtMs === 'number'
-				? new Date(value.endedAtMs).toISOString()
-				: value.endedAt,
-		status: value.status === 'early' ? 'ended-early' : 'completed',
-		endedEarly: value.status === 'early',
-		completedWork: value.completedWork ?? null,
-		nextAction: value.nextAction ?? null,
-		blockerReason: value.blockerReason ?? null,
-	};
+	const versionOne =
+		value.schemaVersion === 0
+			? {
+					...value,
+					schemaVersion: 1,
+					startedAt:
+						typeof value.startedAtMs === 'number'
+							? new Date(value.startedAtMs).toISOString()
+							: value.startedAt,
+					endedAt:
+						typeof value.endedAtMs === 'number'
+							? new Date(value.endedAtMs).toISOString()
+							: value.endedAt,
+					status: value.status === 'early' ? 'ended-early' : 'completed',
+					endedEarly: value.status === 'early',
+					completedWork: value.completedWork ?? null,
+					nextAction: value.nextAction ?? null,
+					blockerReason: value.blockerReason ?? null,
+				}
+			: value;
+	return versionOne.schemaVersion === 1
+		? {
+				...versionOne,
+				schemaVersion: SESSION_SCHEMA_VERSION,
+				subtaskId: null,
+			}
+		: versionOne;
 }
 
 function normalizeOptionalText(value: string | null): string | null {
@@ -171,4 +185,8 @@ function isExecutionStatus(value: unknown): value is ExecutionStatus {
 
 function isOptionalText(value: unknown): value is string | null {
 	return value === null || typeof value === 'string';
+}
+
+function isNullableSubtaskId(value: unknown): value is string | null {
+	return value === null || (typeof value === 'string' && value.length > 0);
 }

@@ -18,6 +18,7 @@ test('test vault contains the three Obsidian plugin artifacts', async () => {
 	assert.match(bundle, /open-test-modal/);
 	assert.match(bundle, /record-quick-progress/);
 	assert.match(bundle, /retry-session-writes/);
+	assert.match(bundle, /manage-subtasks/);
 	assert.match(styles, /Phase 1/);
 });
 

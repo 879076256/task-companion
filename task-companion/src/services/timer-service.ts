@@ -27,6 +27,7 @@ export class TimerService {
 	private readonly listeners = new Set<TimerListener>();
 	private readonly logger: ErrorLogger;
 	private currentTaskId: string | null = null;
+	private currentSubtaskId: string | null = null;
 	private persistenceHook: (() => void) | null = null;
 	private sessionCompletedHook: SessionCompletedListener | null = null;
 	private readonly emittedSessionIds = new Set<string>();
@@ -47,11 +48,27 @@ export class TimerService {
 		return this.currentTaskId;
 	}
 
+	getSubtaskId(): string | null {
+		return this.currentSubtaskId;
+	}
+
 	bindTask(taskId: string): void {
 		if (!/^\^tc-[0-9a-f]{6}$/u.test(taskId)) {
 			throw new Error('Invalid Task Companion task ID.');
 		}
+		if (this.currentTaskId !== taskId) this.currentSubtaskId = null;
 		this.currentTaskId = taskId;
+		this.requestPersistence();
+	}
+
+	bindSubtask(subtaskId: string | null): void {
+		if (this.state.status === 'running' || this.state.status === 'paused') {
+			throw new Error('Cannot change execution target during an active timer.');
+		}
+		if (subtaskId !== null && subtaskId.length === 0) {
+			throw new Error('Invalid subtask ID.');
+		}
+		this.currentSubtaskId = subtaskId;
 		this.requestPersistence();
 	}
 
@@ -60,6 +77,11 @@ export class TimerService {
 			typeof taskId === 'string' && /^\^tc-[0-9a-f]{6}$/u.test(taskId)
 				? taskId
 				: null;
+	}
+
+	restoreSubtaskId(subtaskId: unknown): void {
+		this.currentSubtaskId =
+			typeof subtaskId === 'string' && subtaskId.length > 0 ? subtaskId : null;
 	}
 
 	onPersistenceRequested(hook: () => void): void {
@@ -82,6 +104,7 @@ export class TimerService {
 			mode,
 			nowMs,
 			sessionId: crypto.randomUUID(),
+			subtaskId: this.currentSubtaskId,
 			durationSeconds,
 		};
 		const result = startTimer(this.state, input);
@@ -139,6 +162,9 @@ export class TimerService {
 	/** Called on plugin load to restore persisted state */
 	restore(saved: unknown, nowMs: number): void {
 		this.state = restoreTimerState(saved, nowMs);
+		if (this.state.status !== 'idle') {
+			this.currentSubtaskId = this.state.subtaskId;
+		}
 		if (this.state.status === 'running') {
 			this.startTicking();
 		}

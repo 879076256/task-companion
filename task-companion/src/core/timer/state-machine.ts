@@ -37,6 +37,7 @@ export function startTimer(
 		durationSeconds,
 		startedAtMs: input.nowMs,
 		pausedDurationMs: 0,
+		subtaskId: input.subtaskId ?? null,
 		endsAtMs: input.nowMs + durationSeconds * 1_000,
 	};
 	return { ok: true, state: nextState };
@@ -59,6 +60,7 @@ export function pauseTimer(state: TimerState, nowMs: number): TimerTransition {
 		durationSeconds: state.durationSeconds,
 		startedAtMs: state.startedAtMs,
 		pausedDurationMs: state.pausedDurationMs,
+		subtaskId: state.subtaskId,
 		pausedAtMs: nowMs,
 		remainingSeconds,
 	};
@@ -78,6 +80,7 @@ export function resumeTimer(state: TimerState, nowMs: number): TimerTransition {
 		startedAtMs: state.startedAtMs,
 		pausedDurationMs:
 			state.pausedDurationMs + Math.max(0, nowMs - state.pausedAtMs),
+		subtaskId: state.subtaskId,
 		endsAtMs: nowMs + state.remainingSeconds * 1_000,
 	};
 	return { ok: true, state: nextState };
@@ -101,6 +104,7 @@ export function finishTimerEarly(
 		durationSeconds: state.durationSeconds,
 		startedAtMs: state.startedAtMs,
 		pausedDurationMs,
+		subtaskId: state.subtaskId,
 		endedAtMs: nowMs,
 		completion: 'early',
 	};
@@ -149,6 +153,7 @@ function completeNormally(state: RunningTimerState): FinishedTimerState {
 		durationSeconds: state.durationSeconds,
 		startedAtMs: state.startedAtMs,
 		pausedDurationMs: state.pausedDurationMs,
+		subtaskId: state.subtaskId,
 		endedAtMs: state.endsAtMs,
 		completion: 'normal',
 	};

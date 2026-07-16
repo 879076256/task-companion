@@ -34,3 +34,16 @@
 - 旧错误 Phase 3/4 分支和标签已按用户要求直接删除；只保留正确 `v0.3.1-task-selection` 基线。
 - 人工验收产生的 JSONL 保留为本地测试 Vault 运行记录并由 Git 忽略；仓库使用 `tests/fixtures/session-v1.jsonl` 保存确定性样例。
 - 用户确认计时、快速推进、下一步和历史功能无其他问题，Phase 4 于 2026-07-16 验收通过。
+
+## 2026-07-16：Phase 5 一层任务拆解
+
+- 子任务不是 Markdown Tasks 的第二来源；它是稳定 taskId 下的执行拆解档案，严格只有一层。
+- 子任务变化采用 `TaskCompanion/Subtasks/tc-xxxxxx.jsonl` 追加事件，排序交换写在同一事件，保留完成、取消和返工历史。
+- 取消不计入完成数或当前进度分母，但历史和已投入时间仍可查看。
+- `origin` 支持 initial、during-execution、template；本阶段不提供模板加载界面。
+- ExecutionSession 升级为 schemaVersion 2 并加入可空 subtaskId；旧日志自动归为母任务直接投入。
+- 计时开始时将 subtaskId 固定进 TimerState，避免暂停、重载或当前选择变化导致统计漂移。
+- 当前下一步优先显示活动子任务标题；没有子任务下一步时回退 Phase 4 的文字 nextAction。
+- 无子任务时只显示累计执行与投入，不制造完成百分比。
+- 人工验收确认活动子任务选择和状态变化正确；为避免把“完成”误解为“完成设置”，按钮改为“标记完成 / 取消子任务 / 恢复为进行中”。
+- 用户确认 Phase 5 没有其他问题，本阶段于 2026-07-16 验收通过。

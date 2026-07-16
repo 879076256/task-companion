@@ -11,6 +11,7 @@ interface TimerSession {
 	durationSeconds: number;
 	startedAtMs: number;
 	pausedDurationMs: number;
+	subtaskId: string | null;
 }
 
 export interface RunningTimerState extends TimerSession {
@@ -42,6 +43,7 @@ export interface StartTimerInput {
 	durationSeconds?: number;
 	nowMs: number;
 	sessionId: string;
+	subtaskId?: string | null;
 }
 
 export type TimerTransitionError =
