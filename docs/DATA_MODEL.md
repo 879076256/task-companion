@@ -1,6 +1,6 @@
-# 数据模型（v4）
+# 数据模型（v5）
 
-> Phase 5 的 ExecutionSession 当前 schemaVersion 为 2；旧 v0/v1 日志读取时迁移。子任务采用 Vault 内按母任务分文件的追加事件日志。
+> Phase 6 新增 ReviewEvent schemaVersion 1 与可读复盘 Markdown。ExecutionSession 保持 schemaVersion 2；子任务与复盘索引均采用 Vault 内追加事件日志。
 
 ## 候选实体
 
@@ -19,11 +19,11 @@
 
 ### SourceRef
 
-运行时使用 Vault 相对路径、扫描行号和原始行精确定位；长期关联只使用稳定块 ID。写入前比较完整文件与原行，冲突时不写入。
+运行时使用 Vault 相对路径、扫描行号和原始行精确定位；长期主关联使用稳定块 ID。Phase 6 的复盘事件额外保存完成时的 Vault 相对路径和任务标题快照，用于打开来源和生成可读复盘；路径变化不会改变 taskId。完成写入按块 ID 在来源文件中重新定位，重复 ID 或不可用来源时不写入。
 
 ### PluginSettings
 
-插件 `data.json` 保存基础设置、短期计时状态和当前选中的稳定 `taskId`。不保存任务正文或长期执行历史。
+插件 `data.json` 保存基础设置、短期计时状态、当前选中的稳定 `taskId` 和尚未成功写入 Vault 的临时队列。它不是会话、子任务或复盘的长期来源；Phase 6 待写复盘为恢复所需会暂存任务标题快照和复盘正文。
 
 ### TimerState
 
@@ -79,15 +79,42 @@
 
 `data.json` 只临时保存尚未成功追加到 Vault 的完整会话。结束时先进入队列；用户保存、跳过或关闭轻量表单后尝试追加。写入失败保留队列并提示重试，成功后删除。它不是长期历史来源。
 
+### ReviewEvent（schemaVersion 1）
+
+复盘索引采用 `TaskCompanion/Reviews/index.jsonl`，每次状态变化追加一个完整快照，按 `reviewId` 折叠为最新状态；追加前按 `eventId` 检查重复。
+
+| 字段 | 含义 |
+| --- | --- |
+| `eventId` / `reviewId` | 事件幂等 ID 与一次任务复盘的稳定 ID |
+| `taskId` | 原任务稳定 `^tc-xxxxxx` ID |
+| `taskTitle` | 完成时任务标题快照，不包含 Task Companion 块 ID |
+| `sourcePath` / `sourceLineNumber` | 完成时 Vault 相对路径与定位提示；行号不作长期身份 |
+| `occurredAt` / `completedAt` | 事件时间与原任务完成时间 |
+| `reviewStatus` | `pending` 或 `completed` |
+| `stats` | 完成时冻结的自动复盘统计 |
+| `reviewText` | 一段自由复盘，可空 |
+| `wentWell` / `reworkOrBlocker` / `nextAdjustment` | 三个可选引导问题答案 |
+| `markdownPath` | 完成复盘文件的 Vault 相对路径；待复盘时为 `null` |
+
+自动统计包含：任务跨度、实际执行天数、会话数、总有效/暂停时间、提前结束次数、初始/执行中新增/完成/取消子任务数、最长耗时步骤、最后一次非空进展和未完成子任务标题。
+
+完成复盘写入 `TaskCompanion/Reviews/YYYY-MM/YYYY-MM-DD-<reviewId>.md`。Markdown 含最小 frontmatter、原任务链接、自动统计、自由复盘和三个可选问题；可直接阅读、备份并从已完成复盘列表重新打开。
+
+### PendingReviewWrites
+
+- `pendingReviewEventWrites`：原任务完成前先写入 `data.json` 的待复盘事件；原任务安全完成后尝试追加索引。索引失败不回滚原任务，队列继续可见并可重试。
+- `pendingReviewMarkdownWrites`：保存复盘前先暂存完整目标路径、Markdown 正文和 completed 事件；Markdown 或索引写入失败时保留，重试使用同一路径和 eventId，成功后清除。
+
 ## 数据流边界
 
-Phase 5 数据流为：选择稳定 taskId → 读取并折叠一层 Subtask 事件 → 修改时追加事件 → 选择直接推进母任务或一个活动子任务 → subtaskId 固定在计时状态及最终 ExecutionSession → 会话历史汇总母任务直接投入、各子任务投入、完成数和当前下一步。没有子任务时不计算或显示虚假百分比。
+Phase 6 完成数据流为：显式选择活动任务 → 按 taskId 读取会话和子任务档案 → 若有活动子任务，要求“返回继续 / 取消剩余 / 保留记录并完成” → 无档案则只安全勾选原任务 → 有档案则冻结统计并持久化待复盘意图 → 按稳定块 ID 将原任务改为完成 → 追加 pending 复盘事件 → 用户从队列填写或跳过可选问题 → 先保留待写正文，再写可读 Markdown 和 completed 事件。原任务完成与复盘保存相互独立。
 
 ## 隐私与安全
 
 - 不设计云端副本或网络传输。
 - 不采集遥测。
 - 日志不得输出任务正文、文件内容或绝对 Vault 路径。
+- 复盘文件和复盘索引按产品目的保存用户主动确认的任务标题与复盘文字，但只留在本地 Vault；错误日志仍不得输出这些内容。
 - 测试夹具只能包含人造内容。
 
 ## 待确认问题

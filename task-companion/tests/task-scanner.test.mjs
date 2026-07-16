@@ -123,6 +123,54 @@ test('new IDs cannot collide with an existing ID in a later file', async () => {
 	assert.equal(result.failures.length, 0);
 });
 
+test('completion finds the stable ID after line movement and changes only its checkbox', async () => {
+	const vault = new FakeVault({
+		'Tasks.md': '- [ ] 目标任务 ⏫ ^tc-aabbcc\n- [ ] 其他任务 ⏫ ^tc-bbccdd',
+	});
+	const scanner = new TaskScanner(vault);
+	const selected = (await scanner.select('2026-07-16')).tasks.find(
+		({ task }) => task.id === '^tc-aabbcc',
+	);
+	assert.ok(selected);
+	vault.files.set(
+		'Tasks.md',
+		'前置说明\n- [ ] 目标任务 ⏫ ^tc-aabbcc\n- [ ] 其他任务 ⏫ ^tc-bbccdd',
+	);
+
+	await scanner.complete(selected);
+	assert.equal(
+		vault.files.get('Tasks.md'),
+		'前置说明\n- [x] 目标任务 ⏫ ^tc-aabbcc\n- [ ] 其他任务 ⏫ ^tc-bbccdd',
+	);
+});
+
+test('completion rejects duplicate IDs without modifying the source', async () => {
+	const content = '- [ ] A ⏫ ^tc-aabbcc\n- [ ] B ⏫ ^tc-aabbcc';
+	const vault = new FakeVault({ 'Tasks.md': content });
+	const scanner = new TaskScanner(vault);
+	await assert.rejects(
+		scanner.complete({
+			task: {
+				id: '^tc-aabbcc',
+				text: 'A ⏫ ^tc-aabbcc',
+				raw: '- [ ] A ⏫ ^tc-aabbcc',
+				sourcePath: 'Tasks.md',
+				lineNumber: 1,
+				checked: false,
+				cancelled: false,
+				priority: '⏫',
+				hasRecurrence: false,
+				start: null,
+				scheduled: null,
+				due: null,
+				blockId: '^tc-aabbcc',
+			},
+			category: 'important',
+		}),
+	);
+	assert.equal(vault.files.get('Tasks.md'), content);
+});
+
 test('plugin entry keeps scanner, source opening and task binding while adding sessions', async () => {
 	const main = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 	assert.match(main, /new TaskScanner\(/u);

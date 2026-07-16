@@ -61,6 +61,16 @@ export class TimerService {
 		this.requestPersistence();
 	}
 
+	clearTask(): void {
+		if (this.state.status === 'running' || this.state.status === 'paused') {
+			throw new Error('Cannot clear the task during an active timer.');
+		}
+		this.currentTaskId = null;
+		this.currentSubtaskId = null;
+		if (this.state.status === 'finished') this.state = createIdleState();
+		this.requestPersistence();
+	}
+
 	bindSubtask(subtaskId: string | null): void {
 		if (this.state.status === 'running' || this.state.status === 'paused') {
 			throw new Error('Cannot change execution target during an active timer.');

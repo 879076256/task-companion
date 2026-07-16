@@ -96,6 +96,30 @@ export class TaskScanner {
 		};
 	}
 
+	async complete(selected: SelectedTask): Promise<void> {
+		await this.vault.process(selected.task.sourcePath, (content) => {
+			const lines = content.split('\n');
+			const matches = lines
+				.map((line, index) => ({
+					line,
+					index,
+					task: parseTaskLine(line, selected.task.sourcePath, index + 1),
+				}))
+				.filter(({ task }) => task?.blockId === selected.task.id);
+			if (matches.length !== 1) throw new Error('task-id-conflict');
+			const match = matches[0];
+			if (!match?.task || match.task.cancelled) throw new Error('task-unavailable');
+			if (match.task.checked) return content;
+			const updated = match.line.replace(
+				/^(\s*[-*]\s+)\[ \]/u,
+				'$1[x]',
+			);
+			if (updated === match.line) throw new Error('task-write-conflict');
+			lines[match.index] = updated;
+			return lines.join('\n');
+		});
+	}
+
 	private async scanFile(
 		snapshot: FileSnapshot,
 		tasks: ScannerTask[],

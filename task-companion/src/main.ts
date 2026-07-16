@@ -3,12 +3,16 @@ import { ConsoleLogSink } from './adapters/console-log-sink';
 import { ObsidianSessionVault } from './adapters/obsidian/obsidian-session-vault';
 import { ObsidianSubtaskVault } from './adapters/obsidian/obsidian-subtask-vault';
 import { ObsidianTaskVault } from './adapters/obsidian/obsidian-task-vault';
+import { ObsidianReviewVault } from './adapters/obsidian/obsidian-review-vault';
 import { TaskScanner } from './adapters/tasks/task-scanner';
 import {
 	PLUGIN_NAME,
+	COMPLETE_TASK_COMMAND_ID,
 	MANAGE_SUBTASKS_COMMAND_ID,
 	QUICK_PROGRESS_COMMAND_ID,
 	RETRY_SESSION_WRITES_COMMAND_ID,
+	RETRY_REVIEW_WRITES_COMMAND_ID,
+	REVIEW_QUEUE_COMMAND_ID,
 	SELECT_TASK_COMMAND_ID,
 	SESSION_HISTORY_COMMAND_ID,
 	TEST_COMMAND_ID,
@@ -19,14 +23,21 @@ import {
 	ExecutionSession,
 	SessionReflection,
 } from './core/sessions/model';
+import type { ReviewEvent } from './core/reviews/model';
 import type { SelectedTask } from './core/tasks/task-rules';
 import { resolveTaskSelectionAction } from './core/tasks/task-selection';
 import { ErrorLogger } from './services/error-logger';
 import { SessionRepository } from './services/session-repository';
 import { SessionService } from './services/session-service';
+import { ReviewRepository } from './services/review-repository';
+import { ReviewService } from './services/review-service';
 import { SubtaskRepository } from './services/subtask-repository';
 import { SubtaskService } from './services/subtask-service';
 import { TimerService } from './services/timer-service';
+import {
+	OutstandingSubtaskResolution,
+	TaskCompletionService,
+} from './services/task-completion-service';
 import {
 	DEFAULT_SETTINGS,
 	normalizeSettings,
@@ -35,6 +46,9 @@ import {
 import { TaskCompanionSettingTab } from './settings/settings-tab';
 import { StatusModal } from './ui/status-modal';
 import { ExecutionTargetModal } from './ui/execution-target-modal';
+import { OutstandingSubtasksModal } from './ui/outstanding-subtasks-modal';
+import { ReviewModal } from './ui/review-modal';
+import { ReviewQueueModal } from './ui/review-queue-modal';
 import { SessionHistoryModal } from './ui/session-history-modal';
 import { SessionReflectionModal } from './ui/session-reflection-modal';
 import { SubtaskManagerModal } from './ui/subtask-manager-modal';
@@ -51,6 +65,8 @@ export default class TaskCompanionPlugin extends Plugin {
 	private taskScanner: TaskScanner | null = null;
 	private sessionService: SessionService | null = null;
 	private subtaskService: SubtaskService | null = null;
+	private reviewService: ReviewService | null = null;
+	private completionService: TaskCompletionService | null = null;
 	private saveChain: Promise<void> = Promise.resolve();
 
 	async onload(): Promise<void> {
@@ -66,16 +82,38 @@ export default class TaskCompanionPlugin extends Plugin {
 			this.subtaskService = new SubtaskService(
 				new SubtaskRepository(new ObsidianSubtaskVault(this.app.vault)),
 			);
+			this.reviewService = new ReviewService(
+				new ReviewRepository(new ObsidianReviewVault(this.app.vault)),
+				() =>
+					this.savePluginData(this.sessionService?.getPending() ?? []),
+			);
+			this.completionService = new TaskCompletionService(
+				this.taskScanner,
+				this.sessionService,
+				this.subtaskService,
+				this.reviewService,
+			);
 
 			// Restore task identity before timer state so an expired timer can be logged.
 			if (isRecord(saved)) {
 				this.sessionService.restorePending(saved.pendingSessionWrites);
+				this.reviewService.restorePending(
+					saved.pendingReviewEventWrites,
+					saved.pendingReviewMarkdownWrites,
+				);
 				this.timerService.restoreTaskId(saved.selectedTaskId);
 				this.timerService.restoreSubtaskId(saved.selectedSubtaskId);
 			}
 			if (this.sessionService.getPending().length > 0) {
 				new Notice('Task companion 有待写入会话，正在重试。');
 				await this.retryPendingSessions(false);
+			}
+			if (
+				this.reviewService.getPendingEvents().length > 0 ||
+				this.reviewService.getPendingMarkdown().length > 0
+			) {
+				new Notice('Task companion 有待写入复盘，正在重试。');
+				await this.retryPendingReviews(false);
 			}
 			this.timerService.onSessionCompleted((session) => {
 				void this.handleCompletedSession(session);
@@ -110,6 +148,26 @@ export default class TaskCompanionPlugin extends Plugin {
 						return;
 					}
 					this.openSubtaskManager(taskId);
+				},
+			});
+
+			this.addCommand({
+				id: COMPLETE_TASK_COMMAND_ID,
+				name: 'Complete task',
+				callback: () => this.openTaskSelectionModal('complete'),
+			});
+
+			this.addCommand({
+				id: REVIEW_QUEUE_COMMAND_ID,
+				name: 'Open review queue',
+				callback: () => this.openReviewQueue(),
+			});
+
+			this.addCommand({
+				id: RETRY_REVIEW_WRITES_COMMAND_ID,
+				name: 'Retry pending review writes',
+				callback: () => {
+					void this.retryPendingReviews(true);
 				},
 			});
 
@@ -188,20 +246,87 @@ export default class TaskCompanionPlugin extends Plugin {
 		modal.open();
 	}
 
-	private openTaskSelectionModal(intent: 'timer' | 'quick' = 'timer'): void {
+	private openTaskSelectionModal(
+		intent: 'timer' | 'quick' | 'complete' = 'timer',
+	): void {
 		if (!this.taskScanner) return;
 		const modal = new TaskSelectionModal(
 			this.app,
 			this.taskScanner,
 			formatLocalDate(new Date()),
 			(task) => this.openTaskSource(task),
-			(task) =>
-				intent === 'quick' ? this.recordQuickProgress(task) : this.selectTask(task),
+			(task) => {
+				if (intent === 'quick') return this.recordQuickProgress(task);
+				if (intent === 'complete') return this.beginTaskCompletion(task);
+				return this.selectTask(task);
+			},
 			() => this.activeModals.delete(modal),
-			intent === 'quick' ? '快速推进' : '选择',
+			intent === 'quick' ? '快速推进' : intent === 'complete' ? '完成任务' : '选择',
 		);
 		this.activeModals.add(modal);
 		modal.open();
+	}
+
+	private async beginTaskCompletion(selected: SelectedTask): Promise<boolean> {
+		if (!this.completionService) return false;
+		const timerState = this.timerService?.getState();
+		if (
+			this.timerService?.getTaskId() === selected.task.id &&
+			(timerState?.status === 'running' || timerState?.status === 'paused')
+		) {
+			new Notice('请先结束当前任务的计时，再完成该任务。');
+			return false;
+		}
+		try {
+			const analysis = await this.completionService.analyze(selected);
+			if (analysis.activeSubtasks.length === 0) {
+				return this.completeSelectedTask(selected, null);
+			}
+			const modal = new OutstandingSubtasksModal(
+				this.app,
+				analysis.activeSubtasks,
+				() => this.openSubtaskManager(selected.task.id),
+				(resolution) => this.completeSelectedTask(selected, resolution),
+				() => this.activeModals.delete(modal),
+			);
+			this.activeModals.add(modal);
+			modal.open();
+			return true;
+		} catch (error) {
+			this.logger.capture('task completion analysis', error);
+			new Notice('无法读取任务执行档案；原任务未修改。');
+			return false;
+		}
+	}
+
+	private async completeSelectedTask(
+		selected: SelectedTask,
+		resolution: OutstandingSubtaskResolution | null,
+	): Promise<boolean> {
+		if (!this.completionService) return false;
+		try {
+			const result = await this.completionService.complete(
+				selected,
+				resolution,
+				Date.now(),
+			);
+			if (this.timerService?.getTaskId() === selected.task.id) {
+				this.timerService.clearTask();
+				await this.saveSettings();
+			}
+			if (!result.reviewQueued) {
+				new Notice('任务已完成；无执行档案，不进入复盘队列。');
+			} else if (result.reviewIndexWritePending) {
+				new Notice('任务已完成；待复盘记录写入失败，已保留待重试。');
+			} else {
+				new Notice('任务已完成，并已加入待复盘队列。');
+			}
+			return true;
+		} catch (error) {
+			this.logger.capture('task completion', error);
+			new Notice('任务完成失败；原任务保持未完成。');
+			return false;
+		}
 	}
 
 	private async openTimerModal(
@@ -398,6 +523,52 @@ export default class TaskCompanionPlugin extends Plugin {
 		modal.open();
 	}
 
+	private openReviewQueue(): void {
+		if (!this.reviewService) return;
+		const modal = new ReviewQueueModal(
+			this.app,
+			this.reviewService,
+			(review) => this.openReviewSource(review),
+			(review) => this.openReview(review),
+			(review) => this.openReviewMarkdown(review),
+			() => this.activeModals.delete(modal),
+		);
+		this.activeModals.add(modal);
+		modal.open();
+	}
+
+	private openReview(review: ReviewEvent): void {
+		if (!this.reviewService || review.reviewStatus !== 'pending') return;
+		const modal = new ReviewModal(
+			this.app,
+			review,
+			async (reflection) => {
+				const path = await this.reviewService?.saveReview(
+					review,
+					reflection,
+					Date.now(),
+				);
+				if (path) new Notice(`复盘已保存：${path}`);
+			},
+			() => this.activeModals.delete(modal),
+		);
+		this.activeModals.add(modal);
+		modal.open();
+	}
+
+	private async openReviewSource(review: ReviewEvent): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(review.sourcePath);
+		if (!(file instanceof TFile)) throw new Error('Review source is unavailable.');
+		await this.app.workspace.getLeaf(false).openFile(file);
+	}
+
+	private async openReviewMarkdown(review: ReviewEvent): Promise<void> {
+		if (!review.markdownPath) throw new Error('Review Markdown is unavailable.');
+		const file = this.app.vault.getAbstractFileByPath(review.markdownPath);
+		if (!(file instanceof TFile)) throw new Error('Review Markdown is unavailable.');
+		await this.app.workspace.getLeaf(false).openFile(file);
+	}
+
 	private async retryPendingSessions(showSuccess: boolean): Promise<void> {
 		if (!this.sessionService) return;
 		try {
@@ -406,6 +577,21 @@ export default class TaskCompanionPlugin extends Plugin {
 		} catch (error) {
 			this.logger.capture('pending session retry', error);
 			new Notice('会话重试仍失败；记录继续保留在待写队列中。');
+		}
+	}
+
+	private async retryPendingReviews(showSuccess: boolean): Promise<void> {
+		if (!this.reviewService) return;
+		try {
+			const result = await this.reviewService.retryAll();
+			if (showSuccess) {
+				new Notice(
+					`已重试 ${result.events} 条队列记录和 ${result.markdown} 份复盘。`,
+				);
+			}
+		} catch (error) {
+			this.logger.capture('pending review retry', error);
+			new Notice('复盘重试仍失败；内容继续保留在待写队列中。');
 		}
 	}
 
@@ -419,6 +605,16 @@ export default class TaskCompanionPlugin extends Plugin {
 		if (selectedSubtaskId) data.selectedSubtaskId = selectedSubtaskId;
 		if (pendingSessionWrites.length > 0) {
 			data.pendingSessionWrites = pendingSessionWrites;
+		}
+		const pendingReviewEventWrites =
+			this.reviewService?.getPendingEvents() ?? [];
+		if (pendingReviewEventWrites.length > 0) {
+			data.pendingReviewEventWrites = pendingReviewEventWrites;
+		}
+		const pendingReviewMarkdownWrites =
+			this.reviewService?.getPendingMarkdown() ?? [];
+		if (pendingReviewMarkdownWrites.length > 0) {
+			data.pendingReviewMarkdownWrites = pendingReviewMarkdownWrites;
 		}
 		const operation = this.saveChain.then(() => this.saveData(data));
 		this.saveChain = operation.catch(() => undefined);

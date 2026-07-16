@@ -6,3 +6,6 @@ export const QUICK_PROGRESS_COMMAND_ID = 'record-quick-progress';
 export const SESSION_HISTORY_COMMAND_ID = 'open-session-history';
 export const RETRY_SESSION_WRITES_COMMAND_ID = 'retry-session-writes';
 export const MANAGE_SUBTASKS_COMMAND_ID = 'manage-subtasks';
+export const COMPLETE_TASK_COMMAND_ID = 'complete-task';
+export const REVIEW_QUEUE_COMMAND_ID = 'open-review-queue';
+export const RETRY_REVIEW_WRITES_COMMAND_ID = 'retry-review-writes';
