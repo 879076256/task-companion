@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from 'obsidian';
+import { App, Modal, Notice, Setting } from 'obsidian';
 import { TimerService } from '../services/timer-service';
 import { TimerMode, TimerState } from '../core/timer/model';
 import { getRemainingSeconds } from '../core/timer/state-machine';
@@ -13,6 +13,7 @@ export class TimerControlModal extends Modal {
 		app: App,
 		timer: TimerService,
 		private readonly taskLabel: string | null = null,
+		private readonly nextAction: string | null = null,
 		private readonly onClosed: () => void = () => undefined,
 	) {
 		super(app);
@@ -26,6 +27,12 @@ export class TimerControlModal extends Modal {
 			contentEl.createEl('p', {
 				text: `当前任务：${this.taskLabel}`,
 				cls: 'taskcompanion-current-task',
+			});
+		}
+		if (this.nextAction) {
+			contentEl.createEl('p', {
+				text: `当前下一步：${this.nextAction}`,
+				cls: 'taskcompanion-next-action',
 			});
 		}
 
@@ -52,7 +59,7 @@ export class TimerControlModal extends Modal {
 
 		// Mode selector + Start
 		let selectedMode: TimerMode = 'focus-25';
-		let customDuration = 25;
+		let customDuration: number | null = 25;
 
 		new Setting(controlsEl)
 			.setName('专注模式')
@@ -68,6 +75,22 @@ export class TimerControlModal extends Modal {
 			});
 
 		new Setting(controlsEl)
+			.setName('自由时长（分钟）')
+			.setDesc('选择“自由计时”时使用，范围 1–1440 分钟。')
+			.addText((text) =>
+				text
+					.setValue('25')
+					.setPlaceholder('25')
+					.onChange((value) => {
+						const minutes = Number(value.trim());
+						customDuration =
+							Number.isSafeInteger(minutes) && minutes >= 1 && minutes <= 1_440
+								? minutes
+								: null;
+					}),
+			);
+
+		new Setting(controlsEl)
 			.setName('操作')
 			.addButton((btn) =>
 				btn
@@ -75,7 +98,14 @@ export class TimerControlModal extends Modal {
 					.onClick(() => {
 						const state = this.timer.getState();
 						if (state.status === 'idle' || state.status === 'finished') {
-							const duration = selectedMode === 'custom' ? customDuration * 60 : undefined;
+							if (selectedMode === 'custom' && customDuration === null) {
+								new Notice('请输入 1–1440 之间的整数分钟。');
+								return;
+							}
+							const duration =
+								selectedMode === 'custom' && customDuration !== null
+									? customDuration * 60
+									: undefined;
 							this.timer.start(selectedMode, Date.now(), duration);
 						}
 					}),

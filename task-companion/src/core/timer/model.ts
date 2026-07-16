@@ -10,6 +10,7 @@ interface TimerSession {
 	mode: TimerMode;
 	durationSeconds: number;
 	startedAtMs: number;
+	pausedDurationMs: number;
 }
 
 export interface RunningTimerState extends TimerSession {

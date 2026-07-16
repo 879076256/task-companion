@@ -36,6 +36,7 @@ export function startTimer(
 		mode: input.mode,
 		durationSeconds,
 		startedAtMs: input.nowMs,
+		pausedDurationMs: 0,
 		endsAtMs: input.nowMs + durationSeconds * 1_000,
 	};
 	return { ok: true, state: nextState };
@@ -57,6 +58,7 @@ export function pauseTimer(state: TimerState, nowMs: number): TimerTransition {
 		mode: state.mode,
 		durationSeconds: state.durationSeconds,
 		startedAtMs: state.startedAtMs,
+		pausedDurationMs: state.pausedDurationMs,
 		pausedAtMs: nowMs,
 		remainingSeconds,
 	};
@@ -74,6 +76,8 @@ export function resumeTimer(state: TimerState, nowMs: number): TimerTransition {
 		mode: state.mode,
 		durationSeconds: state.durationSeconds,
 		startedAtMs: state.startedAtMs,
+		pausedDurationMs:
+			state.pausedDurationMs + Math.max(0, nowMs - state.pausedAtMs),
 		endsAtMs: nowMs + state.remainingSeconds * 1_000,
 	};
 	return { ok: true, state: nextState };
@@ -87,12 +91,16 @@ export function finishTimerEarly(
 		return { ok: false, state, error: 'invalid-state' };
 	}
 
+	const pausedDurationMs =
+		state.pausedDurationMs +
+		(state.status === 'paused' ? Math.max(0, nowMs - state.pausedAtMs) : 0);
 	const nextState: FinishedTimerState = {
 		status: 'finished',
 		sessionId: state.sessionId,
 		mode: state.mode,
 		durationSeconds: state.durationSeconds,
 		startedAtMs: state.startedAtMs,
+		pausedDurationMs,
 		endedAtMs: nowMs,
 		completion: 'early',
 	};
@@ -140,6 +148,7 @@ function completeNormally(state: RunningTimerState): FinishedTimerState {
 		mode: state.mode,
 		durationSeconds: state.durationSeconds,
 		startedAtMs: state.startedAtMs,
+		pausedDurationMs: state.pausedDurationMs,
 		endedAtMs: state.endsAtMs,
 		completion: 'normal',
 	};

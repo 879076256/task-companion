@@ -4,6 +4,7 @@ import {
 	TimerTransition,
 	StartTimerInput,
 } from '../core/timer/model';
+import { ExecutionSession, executionSessionFromTimer } from '../core/sessions/model';
 import {
 	createIdleState,
 	startTimer,
@@ -18,6 +19,7 @@ import { restoreTimerState } from '../core/timer/serialization';
 import { ErrorLogger } from './error-logger';
 
 export type TimerListener = (state: TimerState) => void;
+export type SessionCompletedListener = (session: ExecutionSession) => void;
 
 export class TimerService {
 	private state: TimerState = createIdleState();
@@ -26,6 +28,8 @@ export class TimerService {
 	private readonly logger: ErrorLogger;
 	private currentTaskId: string | null = null;
 	private persistenceHook: (() => void) | null = null;
+	private sessionCompletedHook: SessionCompletedListener | null = null;
+	private readonly emittedSessionIds = new Set<string>();
 
 	constructor(logger: ErrorLogger) {
 		this.logger = logger;
@@ -62,6 +66,10 @@ export class TimerService {
 		this.persistenceHook = hook;
 	}
 
+	onSessionCompleted(hook: SessionCompletedListener): void {
+		this.sessionCompletedHook = hook;
+	}
+
 	subscribe(listener: TimerListener): () => void {
 		this.listeners.add(listener);
 		return () => {
@@ -93,6 +101,7 @@ export class TimerService {
 			this.stopTicking();
 			this.notifyAll();
 			this.requestPersistence();
+			this.emitCompleted(this.state);
 		}
 		return result;
 	}
@@ -115,6 +124,7 @@ export class TimerService {
 			this.stopTicking();
 			this.notifyAll();
 			this.requestPersistence();
+			this.emitCompleted(this.state);
 		}
 		return result;
 	}
@@ -132,6 +142,7 @@ export class TimerService {
 		if (this.state.status === 'running') {
 			this.startTicking();
 		}
+		this.emitCompleted(this.state);
 	}
 
 	/** Serialize current state for persistence */
@@ -147,6 +158,7 @@ export class TimerService {
 		this.stopTicking();
 		this.listeners.clear();
 		this.persistenceHook = null;
+		this.sessionCompletedHook = null;
 	}
 
 	private startTicking(): void {
@@ -159,6 +171,7 @@ export class TimerService {
 				this.stopTicking();
 				this.notifyAll();
 				this.requestPersistence();
+				this.emitCompleted(this.state);
 				return;
 			}
 			this.notifyAll();
@@ -187,6 +200,24 @@ export class TimerService {
 			this.persistenceHook?.();
 		} catch (error) {
 			this.logger.capture('timer persistence request', error);
+		}
+	}
+
+	private emitCompleted(state: TimerState): void {
+		if (
+			state.status !== 'finished' ||
+			this.currentTaskId === null ||
+			this.emittedSessionIds.has(state.sessionId)
+		) {
+			return;
+		}
+		this.emittedSessionIds.add(state.sessionId);
+		try {
+			this.sessionCompletedHook?.(
+				executionSessionFromTimer(state, this.currentTaskId),
+			);
+		} catch (error) {
+			this.logger.capture('session completion listener', error);
 		}
 	}
 }

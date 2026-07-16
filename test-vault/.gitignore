@@ -5,3 +5,5 @@
 .obsidian/plugins/task-companion/*
 !.obsidian/plugins/task-companion/.gitkeep
 
+# Runtime execution logs are local acceptance evidence, not repository fixtures.
+TaskCompanion/Sessions/*.jsonl

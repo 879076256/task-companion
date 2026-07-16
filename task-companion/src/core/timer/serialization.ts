@@ -67,6 +67,7 @@ function readSession(value: Record<string, unknown>): {
 	mode: TimerMode;
 	durationSeconds: number;
 	startedAtMs: number;
+	pausedDurationMs: number;
 } | null {
 	if (
 		typeof value.sessionId !== 'string' ||
@@ -82,6 +83,8 @@ function readSession(value: Record<string, unknown>): {
 		mode: value.mode,
 		durationSeconds: value.durationSeconds,
 		startedAtMs: value.startedAtMs,
+		pausedDurationMs:
+			isTimestamp(value.pausedDurationMs) ? value.pausedDurationMs : 0,
 	};
 }
 

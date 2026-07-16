@@ -123,12 +123,13 @@ test('new IDs cannot collide with an existing ID in a later file', async () => {
 	assert.equal(result.failures.length, 0);
 });
 
-test('plugin entry wires scanner, source opening and timer binding without sessions', async () => {
+test('plugin entry keeps scanner, source opening and task binding while adding sessions', async () => {
 	const main = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 	assert.match(main, /new TaskScanner\(/u);
 	assert.match(main, /openTaskSource/u);
 	assert.match(main, /timerService\.bindTask\(selected\.task\.id\)/u);
 	assert.match(main, /action === 'open-current'/u);
 	assert.match(main, /请先结束当前计时/u);
-	assert.equal(main.includes('ExecutionSession'), false);
+	assert.match(main, /handleCompletedSession/u);
+	assert.match(main, /pendingSessionWrites/u);
 });

@@ -17,6 +17,7 @@ export class TaskSelectionModal extends Modal {
 		private readonly onOpenSource: (task: SelectedTask) => Promise<void>,
 		private readonly onSelect: (task: SelectedTask) => Promise<boolean>,
 		private readonly onClosed: () => void,
+		private readonly selectLabel = '选择',
 	) {
 		super(app);
 		this.setTitle('选择任务');
@@ -98,7 +99,7 @@ export class TaskSelectionModal extends Modal {
 				)
 				.addButton((button) =>
 					button
-						.setButtonText(`选择 · ${categoryLabel(category)}`)
+						.setButtonText(`${this.selectLabel} · ${categoryLabel(category)}`)
 						.setCta()
 						.onClick(() => {
 							void this.selectTask(selected);

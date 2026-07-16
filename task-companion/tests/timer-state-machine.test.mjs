@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { build } from 'esbuild';
 
@@ -32,6 +33,7 @@ test('starts a 25 minute timer using an absolute end timestamp', () => {
 		mode: 'focus-25',
 		durationSeconds: 1_500,
 		startedAtMs: 1_000,
+		pausedDurationMs: 0,
 		endsAtMs: 1_501_000,
 	});
 	assert.equal(machine.getRemainingSeconds(result.state, 1_601), 1_500);
@@ -51,6 +53,7 @@ test('pauses with remainingSeconds and resumes from the current timestamp', () =
 	const resumed = machine.resumeTimer(paused, 50_000).state;
 	assert.equal(resumed.status, 'running');
 	assert.equal(resumed.endsAtMs, 3_050_000);
+	assert.equal(resumed.pausedDurationMs, 39_500);
 });
 
 test('supports custom duration and distinguishes normal and early completion', () => {
@@ -120,4 +123,14 @@ test('rejects duplicate starts while running or paused', () => {
 		}).ok,
 		false,
 	);
+});
+
+test('timer control exposes a validated custom minute input', async () => {
+	const source = await readFile(
+		new URL('../src/ui/timer-control-modal.ts', import.meta.url),
+		'utf8',
+	);
+	assert.match(source, /自由时长（分钟）/u);
+	assert.match(source, /minutes >= 1 && minutes <= 1_440/u);
+	assert.match(source, /customDuration \* 60/u);
 });

@@ -22,3 +22,15 @@
 - 使用官方 `Vault.process`，最低 Obsidian 版本提升到 1.1.0。
 - Phase 3 不实现 ExecutionSession、子任务、复盘或主页接入。
 - 旧的 `v0.3.0-task-selection` 保留为历史错误实现；人工验收通过的重做版本使用 `v0.3.1-task-selection`，不改写旧标签。
+
+## 2026-07-16：Phase 4 执行会话重做
+
+- 每次计时沿用启动时 UUID，快速推进单独生成 UUID；都关联稳定 taskId。
+- 正常倒计时活动时长等于计划时长；提前结束按墙钟时间扣除累计暂停时间。
+- 会话结束先进入 `data.json` 待写队列，表单保存、跳过或关闭后再追加 Vault 日志；意外重载可恢复基础会话。
+- 长期格式为 `TaskCompanion/Sessions/YYYY-MM.jsonl`，每行一条完整 schemaVersion 1 会话；读取器支持 v0 迁移。
+- 追加前检查 sessionId，避免“已写入但队列清理失败”造成重复记录。
+- 当前下一步由该 taskId 最新非空 `nextAction` 派生，不建立第二套任务数据库。
+- 旧错误 Phase 3/4 分支和标签已按用户要求直接删除；只保留正确 `v0.3.1-task-selection` 基线。
+- 人工验收产生的 JSONL 保留为本地测试 Vault 运行记录并由 Git 忽略；仓库使用 `tests/fixtures/session-v1.jsonl` 保存确定性样例。
+- 用户确认计时、快速推进、下一步和历史功能无其他问题，Phase 4 于 2026-07-16 验收通过。
