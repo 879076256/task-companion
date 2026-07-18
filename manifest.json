@@ -1,0 +1,9 @@
+{
+	"id": "task-companion",
+	"name": "Task Companion",
+	"version": "1.0.0",
+	"minAppVersion": "1.1.0",
+	"description": "Local-first task execution, focus sessions, reviews, and reusable experience for Obsidian.",
+	"author": "teacher Zhang",
+	"isDesktopOnly": true
+}
