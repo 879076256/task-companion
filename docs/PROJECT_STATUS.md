@@ -1,12 +1,21 @@
 # 项目状态
 
-- **阶段**：Task Companion 1.0.0 已公开发布；Phase 10 测试主页集成继续独立维护
-- **分支**：`main`；Obsidian Community 兼容的正式版本标签为 `1.0.0`
-- **功能状态**：阶段 0–9 全部完成并通过人工验收；1.0.0 已提供可下载的标准三文件安装包
+- **阶段**：Task Companion 1.0.1 已公开发布并等待 Community 自动复审；Phase 10 测试主页集成继续独立维护
+- **分支**：`main`；当前 Obsidian Community 兼容的正式版本标签为 `1.0.1`
+- **功能状态**：阶段 0–9 全部完成并通过人工验收；1.0.1 已提供可下载的标准三文件安装包
 - **长期数据**：Sessions、Subtasks、Reviews 与 Templates 均保存在 Vault 内可查看、可备份的数据文件；`data.json` 只保存设置、短期计时状态和失败待写队列
 - **测试数据**：仅仓库 `test-vault/` 人造数据
 - **正式 Vault**：用户已授权更新插件、Home-Task 测试主页与测试 CSS；原主页、移动主页和原 CSS 未修改，测试 CSS 已使用独有页面类隔离
-- **质量状态**：production build、typecheck、零警告 lint、79/79 单元/结构测试、4/4 发布测试和 3/3 测试 Vault 校验通过；发布 ZIP 可重复构建且 SHA-256 已公开
+- **质量状态**：production build、typecheck、零警告 lint、79/79 单元/结构测试、5/5 发布测试和 3/3 测试 Vault 校验通过；发布 ZIP 可重复构建且 SHA-256 已公开
+
+## 1.0.1 Community 自动审核修正
+
+- 正式 Release：`https://github.com/879076256/task-companion/releases/tag/1.0.1`
+- Community 对 `1.0.0` 的唯一阻断项是 manifest 描述包含冗余单词 “Obsidian”；`1.0.1` 已从根目录与发布清单中移除该词，并加入自动回归断言。
+- 精确标签 `1.0.1` 解引用后指向修正提交 `3bba54b`；该提交已进入远程 `main`。
+- Release 提供 `main.js`、`manifest.json`、`styles.css`、三文件 ZIP 和 SHA-256 清单；远程下载的五个附件与本地产物逐字节一致。
+- 本次只修改发布元数据、版本展示、发布测试与文档，不改变任务、计时、复盘或数据行为；GitHub artifact attestations 仍为 Community 建议项而非阻断项。
+- 等待 Community 页面识别新版本并完成自动复审；通过后由用户点击 Publish。
 
 ## 1.0.0 公开发布
 
@@ -50,7 +59,7 @@
 
 ## Phase 10 当前状态
 
-- 插件 API 升级为兼容的 `1.1.0`，新增只读 `tasks.homeReminders(date?)`；插件发布版本保持 `1.0.0`。
+- 插件 API 升级为兼容的 `1.1.0`，新增只读 `tasks.homeReminders(date?)`；插件发布版本现为 `1.0.1`。
 - 四组规则、排序、循环完成历史、待推进视图和只读扫描已有自动测试。
 - `Home-Test` 已只替换原 Dataview 扫描/筛选/排序区块，原 DOM、CSS 类、标签、指标与交互代码保留。
 - 正式安装只覆盖插件 `main.js` 和 `Home/Home-Test.md`；测试 CSS 无需修改，原桌面/移动主页及原 CSS 未触碰。
