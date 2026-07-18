@@ -4,6 +4,18 @@
 
 Phase 9 已于 2026-07-17 完成并通过测试 Vault、正式 Vault 人工验收。Task Companion 1.0.0 已提交到公开仓库 main、标记 `v1.0.0` 并发布正式 Release，供另一台电脑安装；主页与测试 CSS 未进入插件安装包。
 
+## 当前计划：Obsidian 社区插件目录提交适配
+
+- [x] 确认社区目录报错来自仓库默认分支根目录缺少 `manifest.json`，与账号授权无关。
+- [x] 在仓库根目录准备与插件发布源一致的 `manifest.json`、`versions.json` 和 `LICENSE`；保留现有根目录 `README.md`。
+- [x] 增加发布测试，强制校验根目录与 `task-companion/` 内清单、版本映射完全同步。
+- [x] 完整运行 build、typecheck、零警告 lint 和全部测试；79 项核心测试、5 项发布测试和 3 项测试 Vault 校验全部通过。
+- [x] 经用户单独授权后提交并推送根目录适配文件；远程 `main` 指向提交 `9a9ff42`。
+- [x] 经用户单独授权后创建与 manifest 版本完全一致、无 `v` 前缀的 `1.0.0` 标签与 GitHub Release，并上传 `main.js`、`manifest.json`、`styles.css`；同时保留 ZIP 与 SHA-256 清单。
+- [ ] 用户重新在 Obsidian Community 提交页验证清单并提交审核；官方审核结果不由本地发布流程保证。
+
+验收结果：GitHub 默认分支根目录可直接读取有效清单；根目录和发布清单不会静默漂移；Release 标签精确等于 `manifest.json.version`；商店安装文件仍严格限定为三个生产文件。远程回读确认标签解引用后与 `main` 同指 `9a9ff42`，五个 Release 附件重新下载后的 SHA-256 与本地产物完全一致。
+
 ## 当前计划：主页四类提醒由插件统一提供
 
 - [x] 将 `Home-Test` 的日常任务、今日待办、重点任务、待推进任务规则固化为插件纯函数与自动测试。

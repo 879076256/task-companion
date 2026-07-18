@@ -1,7 +1,7 @@
 # 项目状态
 
 - **阶段**：Task Companion 1.0.0 已公开发布；Phase 10 测试主页集成继续独立维护
-- **分支**：`main`；正式版本标签为 `v1.0.0`
+- **分支**：`main`；Obsidian Community 兼容的正式版本标签为 `1.0.0`
 - **功能状态**：阶段 0–9 全部完成并通过人工验收；1.0.0 已提供可下载的标准三文件安装包
 - **长期数据**：Sessions、Subtasks、Reviews 与 Templates 均保存在 Vault 内可查看、可备份的数据文件；`data.json` 只保存设置、短期计时状态和失败待写队列
 - **测试数据**：仅仓库 `test-vault/` 人造数据
@@ -11,10 +11,11 @@
 ## 1.0.0 公开发布
 
 - 公开仓库：`https://github.com/879076256/task-companion`
-- 正式 Release：`https://github.com/879076256/task-companion/releases/tag/v1.0.0`
-- `v1.0.0` 与远程 main 在发布时均指向正式提交 `06dd7ce`。
+- 正式 Release：`https://github.com/879076256/task-companion/releases/tag/1.0.0`
+- 精确标签 `1.0.0` 与远程 main 在社区目录适配发布时均指向提交 `9a9ff42`；旧标签 `v1.0.0` 保留为首次手动安装版本的历史记录。
 - Release 同时提供 `main.js`、`manifest.json`、`styles.css`、三文件 ZIP 和 SHA-256 清单；不包含主页笔记、CSS snippet、`data.json`、真实 Vault 数据或凭据。
 - GitHub CLI 2.96.0 安装在 `~/.local/bin/gh`，使用 GitHub HTTPS 凭据助手和 noreply 提交邮箱。
+- Obsidian Community 首次提交发现默认分支根目录缺少 `manifest.json`；现已推送根目录 `manifest.json`、`versions.json`、`LICENSE` 及同步校验测试，并创建精确标签与 Release。远程重新下载的五个附件与本地产物哈希完全一致，等待用户在 Community 提交页重新验证并提交审核。
 
 ## Phase 8 完成内容
 
