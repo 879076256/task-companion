@@ -1,12 +1,20 @@
 # 项目状态
 
-- **阶段**：Phase 10 — Home-Test 四类提醒实现与后台验证完成，等待 Obsidian 下次自然重载
-- **分支**：`codex/phase-9-release`（未提交、未打标签、未合并 main）
-- **功能状态**：阶段 0–9 全部完成并通过人工验收；Phase 10 自动与静态验证完成
+- **阶段**：Task Companion 1.0.0 已公开发布；Phase 10 测试主页集成继续独立维护
+- **分支**：`main`；正式版本标签为 `v1.0.0`
+- **功能状态**：阶段 0–9 全部完成并通过人工验收；1.0.0 已提供可下载的标准三文件安装包
 - **长期数据**：Sessions、Subtasks、Reviews 与 Templates 均保存在 Vault 内可查看、可备份的数据文件；`data.json` 只保存设置、短期计时状态和失败待写队列
 - **测试数据**：仅仓库 `test-vault/` 人造数据
-- **正式 Vault**：用户已授权更新插件与 `Home/Home-Test.md`；原主页、移动主页、原 CSS 与测试 CSS 均未修改，插件和测试主页修改前已备份
-- **质量状态**：production build、typecheck、零警告 lint、78/78 单元/结构测试、4/4 发布测试和 3/3 测试 Vault 校验通过；前台呈现等待用户下次自然重载 Obsidian 后生效
+- **正式 Vault**：用户已授权更新插件、Home-Task 测试主页与测试 CSS；原主页、移动主页和原 CSS 未修改，测试 CSS 已使用独有页面类隔离
+- **质量状态**：production build、typecheck、零警告 lint、79/79 单元/结构测试、4/4 发布测试和 3/3 测试 Vault 校验通过；发布 ZIP 可重复构建且 SHA-256 已公开
+
+## 1.0.0 公开发布
+
+- 公开仓库：`https://github.com/879076256/task-companion`
+- 正式 Release：`https://github.com/879076256/task-companion/releases/tag/v1.0.0`
+- `v1.0.0` 与远程 main 在发布时均指向正式提交 `06dd7ce`。
+- Release 同时提供 `main.js`、`manifest.json`、`styles.css`、三文件 ZIP 和 SHA-256 清单；不包含主页笔记、CSS snippet、`data.json`、真实 Vault 数据或凭据。
+- GitHub CLI 2.96.0 安装在 `~/.local/bin/gh`，使用 GitHub HTTPS 凭据助手和 noreply 提交邮箱。
 
 ## Phase 8 完成内容
 
