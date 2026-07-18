@@ -8,13 +8,23 @@ export function buildReviewMarkdown(event: ReviewEvent): string {
 		`reviewId: ${JSON.stringify(event.reviewId)}`,
 		`taskId: ${JSON.stringify(event.taskId)}`,
 		`taskTitle: ${JSON.stringify(event.taskTitle)}`,
+		`targetType: ${event.targetType}`,
+		...(event.targetType === 'subtask'
+			? [
+					`subtaskId: ${JSON.stringify(event.subtaskId)}`,
+					`parentTaskTitle: ${JSON.stringify(event.parentTaskTitle)}`,
+				]
+			: []),
 		`source: ${JSON.stringify(event.sourcePath)}`,
 		`completedAt: ${event.completedAt}`,
 		'reviewStatus: completed',
 		'---',
 		'',
-		`# 任务复盘：${event.taskTitle}`,
+		`# ${event.targetType === 'subtask' ? '子任务' : '任务'}复盘：${event.taskTitle}`,
 		'',
+		...(event.targetType === 'subtask'
+			? [`- 母任务：${event.parentTaskTitle}`, `- 子任务：${event.taskTitle}`]
+			: []),
 		`- 原任务：[[${event.sourcePath}]]`,
 		`- 任务跨度：${formatDuration(stats.taskSpanSeconds)}`,
 		`- 实际执行天数：${stats.activeDayCount} 天`,

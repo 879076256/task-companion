@@ -56,8 +56,10 @@ export class TimerService {
 		if (!/^\^tc-[0-9a-f]{6}$/u.test(taskId)) {
 			throw new Error('Invalid Task Companion task ID.');
 		}
-		if (this.currentTaskId !== taskId) this.currentSubtaskId = null;
+		const changed = this.currentTaskId !== taskId;
+		if (changed) this.currentSubtaskId = null;
 		this.currentTaskId = taskId;
+		if (changed) this.notifyAll();
 		this.requestPersistence();
 	}
 
@@ -65,9 +67,14 @@ export class TimerService {
 		if (this.state.status === 'running' || this.state.status === 'paused') {
 			throw new Error('Cannot clear the task during an active timer.');
 		}
+		const changed =
+			this.currentTaskId !== null ||
+			this.currentSubtaskId !== null ||
+			this.state.status === 'finished';
 		this.currentTaskId = null;
 		this.currentSubtaskId = null;
 		if (this.state.status === 'finished') this.state = createIdleState();
+		if (changed) this.notifyAll();
 		this.requestPersistence();
 	}
 
@@ -78,7 +85,9 @@ export class TimerService {
 		if (subtaskId !== null && subtaskId.length === 0) {
 			throw new Error('Invalid subtask ID.');
 		}
+		const changed = this.currentSubtaskId !== subtaskId;
 		this.currentSubtaskId = subtaskId;
+		if (changed) this.notifyAll();
 		this.requestPersistence();
 	}
 

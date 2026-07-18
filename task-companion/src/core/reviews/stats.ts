@@ -1,5 +1,5 @@
 import type { ExecutionSession } from '../sessions/model';
-import type { SubtaskPlan } from '../subtasks/model';
+import type { Subtask, SubtaskPlan } from '../subtasks/model';
 import type { ReviewStats } from './model';
 
 export function hasExecutionArchive(
@@ -82,6 +82,19 @@ export function buildReviewStats(
 			.filter((subtask) => subtask.status === 'active')
 			.map((subtask) => subtask.title),
 	};
+}
+
+export function buildSubtaskReviewStats(
+	sessions: ExecutionSession[],
+	plan: SubtaskPlan,
+	subtask: Subtask,
+	completedAt: string,
+): ReviewStats {
+	return buildReviewStats(
+		sessions.filter((session) => session.subtaskId === subtask.subtaskId),
+		{ ...plan, subtasks: [subtask], currentNextSubtaskId: null },
+		completedAt,
+	);
 }
 
 function sum(values: number[]): number {

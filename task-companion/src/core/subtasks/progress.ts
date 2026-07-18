@@ -13,6 +13,7 @@ export interface TaskProgressSummary {
 	totalSessionCount: number;
 	totalActiveDurationSeconds: number;
 	parentDirectDurationSeconds: number;
+	currentNextSubtaskId: string | null;
 	currentNextTitle: string | null;
 	subtasks: SubtaskProgress[];
 }
@@ -44,6 +45,7 @@ export function buildTaskProgress(
 		parentDirectDurationSeconds: sumDuration(
 			taskSessions.filter((session) => session.subtaskId === null),
 		),
+		currentNextSubtaskId: plan.currentNextSubtaskId,
 		currentNextTitle:
 			subtasks.find(
 				(subtask) => subtask.subtaskId === plan.currentNextSubtaskId,

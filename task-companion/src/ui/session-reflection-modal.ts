@@ -1,5 +1,6 @@
 import { App, Modal, Setting } from 'obsidian';
 import type { ExecutionSession, SessionReflection } from '../core/sessions/model';
+import { installModalBackButton } from './modal-navigation';
 
 const EMPTY_REFLECTION: SessionReflection = {
 	completedWork: null,
@@ -10,24 +11,30 @@ const EMPTY_REFLECTION: SessionReflection = {
 export class SessionReflectionModal extends Modal {
 	private reflection: SessionReflection = { ...EMPTY_REFLECTION };
 	private settled = false;
+	private removeBackButton: (() => void) | null = null;
 
 	constructor(
 		app: App,
 		private readonly session: ExecutionSession,
 		private readonly onSubmit: (reflection: SessionReflection) => Promise<void>,
 		private readonly onClosed: () => void,
+		titleOverride: string | null = null,
 	) {
 		super(app);
-		this.setTitle(session.mode === 'quick' ? '记录快速推进' : '本次执行已结束');
+		this.setTitle(
+			titleOverride ??
+				(session.mode === 'quick' ? '记录快速推进' : '本次执行已结束'),
+		);
 	}
 
 	onOpen(): void {
+		this.removeBackButton = installModalBackButton(this, null);
 		this.contentEl.createEl('p', {
 			text: '文字均可跳过；基础会话仍会保存。',
 		});
 		this.addTextArea('本次完成了什么', 'completedWork');
 		this.addTextArea('下一步是什么', 'nextAction');
-		this.addTextArea('阻塞原因（可选）', 'blockerReason');
+		this.addTextArea('注意事项（可选）', 'blockerReason');
 		new Setting(this.contentEl)
 			.addButton((button) =>
 				button.setButtonText('跳过').onClick(() => {
@@ -45,6 +52,8 @@ export class SessionReflectionModal extends Modal {
 	}
 
 	onClose(): void {
+		this.removeBackButton?.();
+		this.removeBackButton = null;
 		this.contentEl.empty();
 		this.onClosed();
 		if (!this.settled) {

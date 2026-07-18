@@ -4,6 +4,7 @@ export interface ReviewStorage {
 	read(path: string): Promise<string | null>;
 	append(path: string, content: string): Promise<void>;
 	write(path: string, content: string): Promise<void>;
+	delete(path: string): Promise<void>;
 }
 
 export class ObsidianReviewVault implements ReviewStorage {
@@ -26,6 +27,12 @@ export class ObsidianReviewVault implements ReviewStorage {
 	async write(path: string, content: string): Promise<void> {
 		await this.ensureFolder(parentPath(path));
 		await this.vault.adapter.write(path, content);
+	}
+
+	async delete(path: string): Promise<void> {
+		if (await this.vault.adapter.exists(path)) {
+			await this.vault.adapter.remove(path);
+		}
 	}
 
 	private async ensureFolder(folder: string): Promise<void> {

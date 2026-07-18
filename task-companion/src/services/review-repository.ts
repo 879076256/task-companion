@@ -1,6 +1,7 @@
 import type { ReviewStorage } from '../adapters/obsidian/obsidian-review-vault';
 import {
 	parseReviewLog,
+	purgeSubtaskReviewsFromLog,
 	serializeReviewEvent,
 } from '../core/reviews/log-codec';
 import {
@@ -36,6 +37,24 @@ export class ReviewRepository {
 
 	writeMarkdown(path: string, content: string): Promise<void> {
 		return this.storage.write(path, content);
+	}
+
+	async purgeSubtask(
+		taskId: string,
+		subtaskId: string,
+		extraMarkdownPaths: string[] = [],
+	): Promise<number> {
+		const current = await this.storage.read(REVIEW_INDEX_PATH);
+		const result = current
+			? purgeSubtaskReviewsFromLog(current, taskId, subtaskId)
+			: { content: '', removed: 0, markdownPaths: [] };
+		if (current !== null && result.removed > 0) {
+			await this.storage.write(REVIEW_INDEX_PATH, result.content);
+		}
+		for (const path of new Set([...result.markdownPaths, ...extraMarkdownPaths])) {
+			await this.storage.delete(path);
+		}
+		return result.removed;
 	}
 }
 

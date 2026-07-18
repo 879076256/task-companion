@@ -1,5 +1,9 @@
 import type { SessionLogStorage } from '../adapters/obsidian/obsidian-session-vault';
-import { parseSessionLog, serializeSessionLogEntry } from '../core/sessions/log-codec';
+import {
+	parseSessionLog,
+	purgeSubtaskSessionsFromLog,
+	serializeSessionLogEntry,
+} from '../core/sessions/log-codec';
 import type { ExecutionSession } from '../core/sessions/model';
 
 export const SESSION_LOG_FOLDER = 'TaskCompanion/Sessions';
@@ -38,6 +42,22 @@ export class SessionRepository {
 	async getCurrentNextAction(taskId: string): Promise<string | null> {
 		const sessions = await this.readByTask(taskId);
 		return sessions.find((session) => session.nextAction !== null)?.nextAction ?? null;
+	}
+
+	async purgeSubtask(taskId: string, subtaskId: string): Promise<number> {
+		const paths = (await this.storage.list(SESSION_LOG_FOLDER)).filter((path) =>
+			/\/\d{4}-\d{2}\.jsonl$/u.test(path),
+		);
+		let removed = 0;
+		for (const path of paths) {
+			const current = await this.storage.read(path);
+			if (current === null) continue;
+			const result = purgeSubtaskSessionsFromLog(current, taskId, subtaskId);
+			if (result.removed === 0) continue;
+			await this.storage.write(path, result.content);
+			removed += result.removed;
+		}
+		return removed;
 	}
 }
 

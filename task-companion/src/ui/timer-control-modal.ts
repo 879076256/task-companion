@@ -3,12 +3,14 @@ import { TimerService } from '../services/timer-service';
 import { TimerMode, TimerState } from '../core/timer/model';
 import { getRemainingSeconds } from '../core/timer/state-machine';
 import type { TaskProgressSummary } from '../core/subtasks/progress';
+import { installModalBackButton } from './modal-navigation';
 
 export class TimerControlModal extends Modal {
 	private readonly timer: TimerService;
 	private timeEl!: HTMLElement;
 	private statusEl!: HTMLElement;
 	private unsubscribe: (() => void) | null = null;
+	private removeBackButton: (() => void) | null = null;
 
 	constructor(
 		app: App,
@@ -26,6 +28,7 @@ export class TimerControlModal extends Modal {
 	}
 
 	onOpen(): void {
+		this.removeBackButton = installModalBackButton(this, null);
 		const { contentEl } = this;
 		if (this.taskLabel) {
 			contentEl.createEl('p', {
@@ -64,13 +67,11 @@ export class TimerControlModal extends Modal {
 		// Time display
 		this.timeEl = contentEl.createDiv({
 			cls: 'taskcompanion-time',
-			attr: { style: 'font-size:2.5em;text-align:center;font-variant-numeric:tabular-nums;margin:1em 0;' },
 		});
 
 		// Status label
 		this.statusEl = contentEl.createDiv({
 			cls: 'taskcompanion-label',
-			attr: { style: 'text-align:center;margin-bottom:1em;' },
 		});
 
 		// Subscribe to timer updates
@@ -119,7 +120,7 @@ export class TimerControlModal extends Modal {
 			.setName('操作')
 			.addButton((btn) =>
 				btn
-					.setButtonText('▶ 开始')
+					.setButtonText('开始')
 					.onClick(() => {
 						const state = this.timer.getState();
 						if (state.status === 'idle' || state.status === 'finished') {
@@ -137,7 +138,7 @@ export class TimerControlModal extends Modal {
 			)
 			.addButton((btn) =>
 				btn
-					.setButtonText('⏸ 暂停')
+					.setButtonText('暂停')
 					.onClick(() => {
 						const state = this.timer.getState();
 						if (state.status === 'running') {
@@ -147,7 +148,7 @@ export class TimerControlModal extends Modal {
 			)
 			.addButton((btn) =>
 				btn
-					.setButtonText('▶ 继续')
+					.setButtonText('继续')
 					.onClick(() => {
 						const state = this.timer.getState();
 						if (state.status === 'paused') {
@@ -157,7 +158,7 @@ export class TimerControlModal extends Modal {
 			)
 			.addButton((btn) =>
 				btn
-					.setButtonText('⏹ 结束')
+					.setButtonText('结束')
 					.onClick(() => {
 						const state = this.timer.getState();
 						if (state.status === 'running' || state.status === 'paused') {
@@ -167,7 +168,7 @@ export class TimerControlModal extends Modal {
 			)
 			.addButton((btn) =>
 				btn
-					.setButtonText('↺ 重置')
+					.setButtonText('重置')
 					.onClick(() => {
 						this.timer.reset();
 					}),
@@ -175,6 +176,8 @@ export class TimerControlModal extends Modal {
 	}
 
 	onClose(): void {
+		this.removeBackButton?.();
+		this.removeBackButton = null;
 		if (this.unsubscribe) {
 			this.unsubscribe();
 			this.unsubscribe = null;

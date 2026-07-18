@@ -45,6 +45,7 @@ test('today rules cover every confirmed start, scheduled and due branch', () => 
 	const cases = [
 		['- [ ] 范围内 🔼 🛫 2026-07-15 📅 2026-07-20', true],
 		['- [ ] 今日计划 🔼 ⏳ 2026-07-16', true],
+		['- [ ] 过去计划仍待处理 🔼 ⏳ 2026-07-15', true],
 		['- [ ] 今日截止 🔼 📅 2026-07-16', true],
 		['- [ ] 逾期 🔼 📅 2026-07-15', true],
 		['- [ ] 已开始 🔼 🛫 2026-07-15', true],

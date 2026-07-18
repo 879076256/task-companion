@@ -34,6 +34,10 @@ class MemoryStorage {
 	async append(path, content) {
 		this.files.set(path, `${this.files.get(path) ?? ''}${content}`);
 	}
+
+	async write(path, content) {
+		this.files.set(path, content);
+	}
 }
 
 function createHarness() {
@@ -138,6 +142,30 @@ test('complete, cancel, current-next and reopen keep distinct history states', a
 	]);
 });
 
+test('active, cancelled and completed subtasks can be permanently deleted without tombstones', async () => {
+	const { service, storage } = createHarness();
+	const active = await service.add('^tc-aaaaaa', 'Delete active', 'initial', 1_000);
+	const cancelled = await service.add('^tc-aaaaaa', 'Delete cancelled', 'initial', 2_000);
+	const completed = await service.add('^tc-aaaaaa', 'Delete completed', 'initial', 3_000);
+	await service.add('^tc-aaaaaa', 'Keep me', 'initial', 4_000);
+	await service.cancel('^tc-aaaaaa', cancelled.subtaskId, 5_000);
+	await service.complete('^tc-aaaaaa', completed.subtaskId, 6_000);
+	const path = [...storage.files.keys()][0];
+	storage.files.set(path, `${storage.files.get(path)}invalid-subtask-line\n`);
+	await service.purgeSubtask('^tc-aaaaaa', active.subtaskId);
+	await service.purgeSubtask('^tc-aaaaaa', cancelled.subtaskId);
+	await service.purgeSubtask('^tc-aaaaaa', completed.subtaskId);
+
+	const plan = await service.load('^tc-aaaaaa');
+	assert.deepEqual(plan.subtasks.map(({ title }) => title), ['Keep me']);
+	const content = storage.files.get(path);
+	assert.match(content, /invalid-subtask-line/u);
+	assert.doesNotMatch(content, new RegExp(active.subtaskId, 'u'));
+	assert.doesNotMatch(content, new RegExp(cancelled.subtaskId, 'u'));
+	assert.doesNotMatch(content, new RegExp(completed.subtaskId, 'u'));
+	assert.doesNotMatch(content, /"eventType":"deleted"/u);
+});
+
 test('progress separates parent direct time and each subtask time without fake percentage', async () => {
 	const { service } = createHarness();
 	const first = await service.add('^tc-aaaaaa', 'First', 'initial', 1_000);
@@ -165,6 +193,7 @@ test('progress separates parent direct time and each subtask time without fake p
 	const emptyProgress = await service.progress('^tc-bbbbbb', []);
 	assert.equal(emptyProgress.totalSubtasks, 0);
 	assert.equal(emptyProgress.completedSubtasks, 0);
+	assert.equal(emptyProgress.currentNextSubtaskId, null);
 });
 
 test('viewable JSONL task dossier fixture folds into current state', async () => {
@@ -179,4 +208,16 @@ test('viewable JSONL task dossier fixture folds into current state', async () =>
 	assert.equal(plan.subtasks.length, 1);
 	assert.equal(plan.subtasks[0].title, '准备人工验收清单');
 	assert.equal(plan.currentNextSubtaskId, plan.subtasks[0].subtaskId);
+});
+
+test('subtask service emits the changed parent only after a durable append', async () => {
+	const { service } = createHarness();
+	const changedTaskIds = [];
+	const unsubscribe = service.subscribe((taskId) => changedTaskIds.push(taskId));
+	const subtask = await service.add('^tc-aaaaaa', '自动同步目标', 'initial', 1_000);
+	await service.rename('^tc-aaaaaa', subtask.subtaskId, '新的执行目标', 2_000);
+	unsubscribe();
+	await service.complete('^tc-aaaaaa', subtask.subtaskId, 3_000);
+
+	assert.deepEqual(changedTaskIds, ['^tc-aaaaaa', '^tc-aaaaaa']);
 });

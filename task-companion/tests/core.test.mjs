@@ -13,18 +13,33 @@ async function loadTypeScriptModule(relativePath) {
 	return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 }
 
-test('settings normalization accepts only the supported boolean', async () => {
+test('settings normalization validates the toggle and persisted timer preference', async () => {
 	const { normalizeSettings } = await loadTypeScriptModule(
 		'../src/settings/model.ts',
 	);
 
-	assert.deepEqual(normalizeSettings(undefined), { showTechnicalDetails: false });
+	const defaults = {
+		showTechnicalDetails: false,
+		preferredTimerMode: 'focus-25',
+		customTimerMinutes: 25,
+	};
+	assert.deepEqual(normalizeSettings(undefined), defaults);
 	assert.deepEqual(normalizeSettings({ showTechnicalDetails: true }), {
+		...defaults,
 		showTechnicalDetails: true,
 	});
-	assert.deepEqual(normalizeSettings({ showTechnicalDetails: 'yes' }), {
-		showTechnicalDetails: false,
-	});
+	assert.deepEqual(
+		normalizeSettings({
+			showTechnicalDetails: 'yes',
+			preferredTimerMode: 'custom',
+			customTimerMinutes: 90,
+		}),
+		{ ...defaults, preferredTimerMode: 'custom', customTimerMinutes: 90 },
+	);
+	assert.deepEqual(
+		normalizeSettings({ preferredTimerMode: 'invalid', customTimerMinutes: 0 }),
+		defaults,
+	);
 });
 
 test('error logger emits a scoped, predictable message', async () => {
@@ -39,4 +54,3 @@ test('error logger emits a scoped, predictable message', async () => {
 		'[Task Companion] plugin load failed — TypeError: broken',
 	]);
 });
-

@@ -18,6 +18,7 @@ async function loadTimerModule(entryPoint) {
 
 const machine = await loadTimerModule('../src/core/timer/state-machine.ts');
 const serialization = await loadTimerModule('../src/core/timer/serialization.ts');
+const timerServiceModule = await loadTimerModule('../src/services/timer-service.ts');
 
 test('starts a 25 minute timer using an absolute end timestamp', () => {
 	const result = machine.startTimer(machine.createIdleState(), {
@@ -154,4 +155,50 @@ test('timer control exposes a validated custom minute input', async () => {
 	assert.match(source, /自由时长（分钟）/u);
 	assert.match(source, /minutes >= 1 && minutes <= 1_440/u);
 	assert.match(source, /customDuration \* 60/u);
+});
+
+test('timer service notifies homepage listeners when task identity or target changes', () => {
+	const service = new timerServiceModule.TimerService({ capture() {} });
+	const snapshots = [];
+	const unsubscribe = service.subscribe((state) => {
+		snapshots.push({
+			status: state.status,
+			taskId: service.getTaskId(),
+			subtaskId: service.getSubtaskId(),
+		});
+	});
+
+	service.bindTask('^tc-aabbcc');
+	service.bindSubtask('subtask-one');
+	service.bindSubtask('subtask-one');
+	service.clearTask();
+	unsubscribe();
+	service.bindTask('^tc-bbbbbb');
+
+	assert.deepEqual(snapshots, [
+		{ status: 'idle', taskId: '^tc-aabbcc', subtaskId: null },
+		{ status: 'idle', taskId: '^tc-aabbcc', subtaskId: 'subtask-one' },
+		{ status: 'idle', taskId: null, subtaskId: null },
+	]);
+});
+
+test('resetting a running subtask timer stops it without emitting a completed session', () => {
+	const service = new timerServiceModule.TimerService({ capture() {} });
+	const completed = [];
+	service.bindTask('^tc-aabbcc');
+	service.bindSubtask('delete-me');
+	service.onSessionCompleted((session) => completed.push(session));
+	service.state = machine.startTimer(machine.createIdleState(), {
+		mode: 'focus-25',
+		nowMs: 1_000,
+		sessionId: 'delete-running',
+		subtaskId: 'delete-me',
+	}).state;
+
+	service.reset();
+	service.bindSubtask(null);
+
+	assert.equal(service.getState().status, 'idle');
+	assert.equal(service.getSubtaskId(), null);
+	assert.deepEqual(completed, []);
 });

@@ -71,6 +71,26 @@ test('scanner adds stable IDs only to active formal tasks', async () => {
 	assert.match(vault.files.get('Tasks.md'), /普通复选框\n/u);
 });
 
+test('readonly homepage snapshot never writes IDs and includes recurring completion history', async () => {
+	const original = [
+		'- [ ] 主页任务 🔽 ⏳ 2026-07-15',
+		'- [x] 每周任务 🔁 every week ✅ 2026-07-15',
+	].join('\n');
+	const vault = new FakeVault({ 'Tasks.md': original });
+	let writes = 0;
+	const process = vault.process.bind(vault);
+	vault.process = async (...args) => {
+		writes += 1;
+		return process(...args);
+	};
+	const snapshot = await new TaskScanner(vault).snapshotReadonly();
+	assert.equal(writes, 0);
+	assert.equal(vault.files.get('Tasks.md'), original);
+	assert.equal(snapshot.tasks.length, 1);
+	assert.equal(snapshot.tasks[0].id, 'Tasks.md:1');
+	assert.equal(snapshot.historyTasks[0].completion, '2026-07-15');
+});
+
 test('conflicting block IDs and write failures leave original text unchanged', async () => {
 	const original = '- [ ] 冲突任务 ⏫ ^other-id\n- [ ] 可写任务 🔼 ⏳ 2026-07-16';
 	const vault = new FakeVault({ 'Conflict.md': original });
@@ -103,6 +123,26 @@ test('one unreadable file does not block another file and task selection stays i
 	assert.deepEqual(result.failures, [
 		{ path: 'Broken.md', lineNumber: null, reason: 'read-failed' },
 	]);
+});
+
+test('selection excludes every recurring daily task but keeps non-recurring tasks', async () => {
+	const vault = new FakeVault({
+		'Calendar/Journal/Daily/2026-07-17.md': [
+			'- [ ] 🛏️早起 🔁 every day ^tc-110001',
+			'- [ ] 📖reading 🔁 every day ^tc-110002',
+			'- [ ] 🏃🏻运动 🔁 every day ^tc-110003',
+			'- [ ] 每日整理 🔁 every day ^tc-110004',
+		].join('\n'),
+		'Habits.md': '- [ ] 🛏️早起 🔁 every day ^tc-110005',
+		'Tasks.md': '- [ ] 可执行重点任务 ⏫ ^tc-110006',
+	});
+	const scanner = new TaskScanner(vault);
+	const result = await scanner.select('2026-07-17');
+
+	assert.deepEqual(
+		result.tasks.map(({ task }) => task.id),
+		['^tc-110006'],
+	);
 });
 
 test('new IDs cannot collide with an existing ID in a later file', async () => {
@@ -141,6 +181,19 @@ test('completion finds the stable ID after line movement and changes only its ch
 	assert.equal(
 		vault.files.get('Tasks.md'),
 		'前置说明\n- [x] 目标任务 ⏫ ^tc-aabbcc\n- [ ] 其他任务 ⏫ ^tc-bbccdd',
+	);
+	assert.equal(
+		await scanner.isCompleted({ id: '^tc-aabbcc', sourcePath: 'Tasks.md' }),
+		true,
+	);
+	await scanner.reopen({ id: '^tc-aabbcc', sourcePath: 'Tasks.md' });
+	assert.equal(
+		vault.files.get('Tasks.md'),
+		'前置说明\n- [ ] 目标任务 ⏫ ^tc-aabbcc\n- [ ] 其他任务 ⏫ ^tc-bbccdd',
+	);
+	assert.equal(
+		await scanner.isCompleted({ id: '^tc-aabbcc', sourcePath: 'Tasks.md' }),
+		false,
 	);
 });
 

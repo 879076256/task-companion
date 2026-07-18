@@ -1,6 +1,7 @@
-export const REVIEW_SCHEMA_VERSION = 1;
+export const REVIEW_SCHEMA_VERSION = 2;
 
 export type ReviewStatus = 'pending' | 'completed';
+export type ReviewTargetType = 'task' | 'subtask';
 
 export interface ReviewStats {
 	taskStartedAt: string | null;
@@ -26,6 +27,9 @@ export interface ReviewEvent {
 	reviewId: string;
 	taskId: string;
 	taskTitle: string;
+	targetType: ReviewTargetType;
+	subtaskId: string | null;
+	parentTaskTitle: string | null;
 	sourcePath: string;
 	sourceLineNumber: number;
 	occurredAt: string;
@@ -64,7 +68,7 @@ export function foldReviewEvents(events: ReviewEvent[]): ReviewEvent[] {
 export function normalizeReviewEvent(value: unknown): ReviewEvent | null {
 	if (!isRecord(value) || !isReviewStats(value.stats)) return null;
 	if (
-		value.schemaVersion !== REVIEW_SCHEMA_VERSION ||
+		(value.schemaVersion !== 1 && value.schemaVersion !== REVIEW_SCHEMA_VERSION) ||
 		!isNonEmptyString(value.eventId) ||
 		!isNonEmptyString(value.reviewId) ||
 		!isTaskId(value.taskId) ||
@@ -79,6 +83,25 @@ export function normalizeReviewEvent(value: unknown): ReviewEvent | null {
 		!isOptionalText(value.reworkOrBlocker) ||
 		!isOptionalText(value.nextAdjustment) ||
 		!isOptionalText(value.markdownPath)
+	) {
+		return null;
+	}
+	if (value.schemaVersion === 1) {
+		return {
+			...(value as unknown as Omit<ReviewEvent, 'schemaVersion' | 'targetType' | 'subtaskId' | 'parentTaskTitle'>),
+			schemaVersion: REVIEW_SCHEMA_VERSION,
+			targetType: 'task',
+			subtaskId: null,
+			parentTaskTitle: null,
+		};
+	}
+	if (
+		!isTargetType(value.targetType) ||
+		(value.targetType === 'task' &&
+			(value.subtaskId !== null || value.parentTaskTitle !== null)) ||
+		(value.targetType === 'subtask' &&
+			(!isNonEmptyString(value.subtaskId) ||
+				!isNonEmptyString(value.parentTaskTitle)))
 	) {
 		return null;
 	}
@@ -166,4 +189,8 @@ function isOptionalText(value: unknown): value is string | null {
 
 function isReviewStatus(value: unknown): value is ReviewStatus {
 	return value === 'pending' || value === 'completed';
+}
+
+function isTargetType(value: unknown): value is ReviewTargetType {
+	return value === 'task' || value === 'subtask';
 }

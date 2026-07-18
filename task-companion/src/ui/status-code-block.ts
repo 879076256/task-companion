@@ -1,71 +1,73 @@
-import { MarkdownPostProcessorContext, Plugin } from 'obsidian';
-import { TimerService } from '../services/timer-service';
-import { TimerState } from '../core/timer/model';
+import { MarkdownRenderChild } from 'obsidian';
+import type { TimerState } from '../core/timer/model';
 import { getRemainingSeconds } from '../core/timer/state-machine';
+import type { TimerService } from '../services/timer-service';
 
-/**
- * Renders a ````taskcompanion\nview: status\n```` code block.
- * Multiple instances share the same TimerService and update in sync.
- */
-export function registerStatusCodeBlock(
-	plugin: Plugin,
-	timer: TimerService,
-): void {
-	plugin.registerMarkdownCodeBlockProcessor(
-		'taskcompanion',
-		(source: string, el: HTMLElement, _ctx: MarkdownPostProcessorContext) => {
-			const trimmed = source.trim();
-			if (trimmed !== 'view: status' && trimmed !== '') {
-				el.createEl('p', { text: 'Unknown taskcompanion view: ' + trimmed });
-				return;
-			}
+export class StatusViewChild extends MarkdownRenderChild {
+	private unsubscribe: (() => void) | null = null;
+	private openButton: HTMLButtonElement | null = null;
+	private readonly handleOpen = (): void => this.onOpenTimer();
 
-			renderStatus(el, timer);
-		},
-	);
-}
-
-function renderStatus(
-	container: HTMLElement,
-	timer: TimerService,
-): void {
-	const timeEl = container.createDiv({
-		cls: 'taskcompanion-time',
-	});
-	const labelEl = container.createDiv({
-		cls: 'taskcompanion-label',
-	});
-
-	function update(state: TimerState): void {
-		const remaining = getRemainingSeconds(state, Date.now());
-		const minutes = Math.floor(remaining / 60);
-		const seconds = remaining % 60;
-		timeEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-		switch (state.status) {
-			case 'idle':
-				labelEl.textContent = '任务空闲中';
-				break;
-			case 'running':
-				labelEl.textContent = '正在专注';
-				break;
-			case 'paused':
-				labelEl.textContent = '已暂停';
-				break;
-			case 'finished':
-				labelEl.textContent = '专注完成';
-				break;
-		}
+	constructor(
+		containerEl: HTMLElement,
+		private readonly timer: TimerService,
+		private readonly onOpenTimer: () => void,
+	) {
+		super(containerEl);
 	}
 
-	// Initial render
-	update(timer.getState());
+	onload(): void {
+		this.containerEl.empty();
+		this.containerEl.addClass('taskcompanion-widget', 'taskcompanion-status-widget');
+		const header = this.containerEl.createDiv({ cls: 'taskcompanion-widget-header' });
+		header.createEl('h3', { text: '专注状态' });
+		const badge = header.createSpan({ cls: 'taskcompanion-badge' });
+		const timeEl = this.containerEl.createDiv({ cls: 'taskcompanion-time' });
+		const labelEl = this.containerEl.createDiv({ cls: 'taskcompanion-label' });
+		const actions = this.containerEl.createDiv({ cls: 'taskcompanion-widget-actions' });
+		this.openButton = actions.createEl('button', {
+			text: '打开计时控制',
+			cls: 'taskcompanion-button taskcompanion-button-primary',
+		});
+		this.openButton.type = 'button';
+		this.openButton.addEventListener('click', this.handleOpen);
 
-	// Subscribe for live updates
-	const unsubscribe = timer.subscribe(update);
+		const update = (state: TimerState): void => {
+			const remaining = getRemainingSeconds(state, Date.now());
+			const minutes = Math.floor(remaining / 60);
+			const seconds = remaining % 60;
+			timeEl.setText(
+				`${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+			);
+			const label = timerStatusLabel(state);
+			labelEl.setText(label);
+			badge.setText(label);
+			badge.toggleClass('is-active', state.status === 'running');
+			badge.toggleClass('is-paused', state.status === 'paused');
+		};
 
-	// Cleanup when element is removed from DOM
-	container.addEventListener('removed', () => {
-		unsubscribe();
-	});
+		update(this.timer.getState());
+		this.unsubscribe = this.timer.subscribe(update);
+	}
+
+	onunload(): void {
+		this.unsubscribe?.();
+		this.unsubscribe = null;
+		this.openButton?.removeEventListener('click', this.handleOpen);
+		this.openButton = null;
+		this.containerEl.empty();
+	}
+}
+
+function timerStatusLabel(state: TimerState): string {
+	switch (state.status) {
+		case 'idle':
+			return '任务空闲中';
+		case 'running':
+			return '正在专注';
+		case 'paused':
+			return '已暂停';
+		case 'finished':
+			return '专注完成';
+	}
 }

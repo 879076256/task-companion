@@ -8,7 +8,7 @@ import {
 	hasExecutionArchive,
 } from '../core/reviews/stats';
 import type { Subtask } from '../core/subtasks/model';
-import type { SelectedTask } from '../core/tasks/task-rules';
+import type { ParsedTask, SelectedTask } from '../core/tasks/task-rules';
 import type { SessionService } from './session-service';
 import type { SubtaskService } from './subtask-service';
 import type { ReviewService } from './review-service';
@@ -34,10 +34,11 @@ export class TaskCompletionService {
 		private readonly idFactory: () => string = () => crypto.randomUUID(),
 	) {}
 
-	async analyze(selected: SelectedTask): Promise<CompletionAnalysis> {
+	async analyze(selected: SelectedTask | ParsedTask): Promise<CompletionAnalysis> {
+		const task = selectedTaskValue(selected);
 		const [sessions, plan] = await Promise.all([
-			this.sessions.history(selected.task.id),
-			this.subtasks.load(selected.task.id),
+			this.sessions.history(task.id),
+			this.subtasks.load(task.id),
 		]);
 		return {
 			hasArchive: hasExecutionArchive(sessions, plan),
@@ -48,13 +49,14 @@ export class TaskCompletionService {
 	}
 
 	async complete(
-		selected: SelectedTask,
+		selected: SelectedTask | ParsedTask,
 		resolution: OutstandingSubtaskResolution | null,
 		nowMs: number,
 	): Promise<CompletionResult> {
+		const task = selectedTaskValue(selected);
 		let [sessions, plan] = await Promise.all([
-			this.sessions.history(selected.task.id),
-			this.subtasks.load(selected.task.id),
+			this.sessions.history(task.id),
+			this.subtasks.load(task.id),
 		]);
 		const activeSubtasks = plan.subtasks.filter(
 			(subtask) => subtask.status === 'active',
@@ -64,14 +66,15 @@ export class TaskCompletionService {
 		}
 		if (resolution === 'cancel') {
 			for (const subtask of activeSubtasks) {
-				await this.subtasks.cancel(selected.task.id, subtask.subtaskId, nowMs);
+				await this.subtasks.cancel(task.id, subtask.subtaskId, nowMs);
 			}
-			plan = await this.subtasks.load(selected.task.id);
+			plan = await this.subtasks.load(task.id);
 		}
 
-		const reviewQueued = hasExecutionArchive(sessions, plan);
+		const reviewQueued = true;
 		const completedAt = new Date(nowMs).toISOString();
-		const pendingEvent = reviewQueued
+		const alreadyPending = await this.reviews.hasPendingTask(task.id);
+		const pendingEvent = !alreadyPending
 			? createPendingReviewEvent(
 					selected,
 					buildReviewStats(sessions, plan, completedAt),
@@ -100,19 +103,23 @@ export class TaskCompletionService {
 }
 
 function createPendingReviewEvent(
-	selected: SelectedTask,
+		selected: SelectedTask | ParsedTask,
 	stats: ReviewEvent['stats'],
 	completedAt: string,
 	idFactory: () => string,
 ): ReviewEvent {
+	const task = selectedTaskValue(selected);
 	return {
 		schemaVersion: REVIEW_SCHEMA_VERSION,
 		eventId: idFactory(),
 		reviewId: idFactory(),
-		taskId: selected.task.id,
-		taskTitle: removeTrailingTaskId(selected.task.text),
-		sourcePath: selected.task.sourcePath,
-		sourceLineNumber: selected.task.lineNumber,
+		taskId: task.id,
+		taskTitle: removeTrailingTaskId(task.text),
+		targetType: 'task',
+		subtaskId: null,
+		parentTaskTitle: null,
+		sourcePath: task.sourcePath,
+		sourceLineNumber: task.lineNumber,
 		occurredAt: completedAt,
 		completedAt,
 		reviewStatus: 'pending',
@@ -123,6 +130,10 @@ function createPendingReviewEvent(
 		nextAdjustment: null,
 		markdownPath: null,
 	};
+}
+
+function selectedTaskValue(selected: SelectedTask | ParsedTask): ParsedTask {
+	return 'task' in selected ? selected.task : selected;
 }
 
 function removeTrailingTaskId(text: string): string {

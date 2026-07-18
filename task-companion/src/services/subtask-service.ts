@@ -13,8 +13,13 @@ import {
 import { SubtaskRepository } from './subtask-repository';
 
 export type IdFactory = () => string;
+export type SubtaskChangeListener = (taskId: string) => void;
+export type SubtaskEventListener = (event: SubtaskEvent) => void;
 
 export class SubtaskService {
+	private readonly listeners = new Set<SubtaskChangeListener>();
+	private readonly eventListeners = new Set<SubtaskEventListener>();
+
 	constructor(
 		private readonly repository: SubtaskRepository,
 		private readonly idFactory: IdFactory = () => crypto.randomUUID(),
@@ -23,6 +28,16 @@ export class SubtaskService {
 	load(taskId: string): Promise<SubtaskPlan> {
 		assertTaskId(taskId);
 		return this.repository.readPlan(taskId);
+	}
+
+	subscribe(listener: SubtaskChangeListener): () => void {
+		this.listeners.add(listener);
+		return () => this.listeners.delete(listener);
+	}
+
+	onEvent(listener: SubtaskEventListener): () => void {
+		this.eventListeners.add(listener);
+		return () => this.eventListeners.delete(listener);
 	}
 
 	async add(
@@ -49,6 +64,40 @@ export class SubtaskService {
 		};
 		await this.append('created', taskId, nowMs, [subtask]);
 		return subtask;
+	}
+
+	async addMany(
+		taskId: string,
+		titles: string[],
+		origin: SubtaskOrigin,
+		nowMs: number,
+	): Promise<Subtask[]> {
+		assertTaskId(taskId);
+		const plan = await this.load(taskId);
+		const existing = new Set(plan.subtasks.map(({ title }) => title));
+		const normalized = titles
+			.map((title) => normalizeSubtaskTitle(title))
+			.filter(
+				(title): title is string => title !== null && !existing.has(title),
+			);
+		const unique = [...new Set(normalized)];
+		if (unique.length === 0) return [];
+		const timestamp = toIso(nowMs);
+		const firstOrder = nextOrder(plan);
+		const subtasks = unique.map((title, index): Subtask => ({
+			subtaskId: this.idFactory(),
+			taskId,
+			title,
+			status: 'active',
+			order: firstOrder + index,
+			origin,
+			createdAt: timestamp,
+			updatedAt: timestamp,
+			completedAt: null,
+			cancelledAt: null,
+		}));
+		await this.append('created', taskId, nowMs, subtasks);
+		return subtasks;
 	}
 
 	async rename(
@@ -94,6 +143,13 @@ export class SubtaskService {
 
 	reopen(taskId: string, subtaskId: string, nowMs: number): Promise<void> {
 		return this.transition(taskId, subtaskId, 'active', nowMs);
+	}
+
+	async purgeSubtask(taskId: string, subtaskId: string): Promise<void> {
+		await this.requireSubtask(taskId, subtaskId);
+		const removedReferences = await this.repository.purgeSubtask(taskId, subtaskId);
+		if (removedReferences === 0) throw new Error('Subtask could not be deleted.');
+		this.notify(taskId);
 	}
 
 	async setCurrentNext(
@@ -160,7 +216,7 @@ export class SubtaskService {
 		return subtask;
 	}
 
-	private append(
+	private async append(
 		eventType: SubtaskEventType,
 		taskId: string,
 		nowMs: number,
@@ -178,7 +234,25 @@ export class SubtaskService {
 		if (currentNextSubtaskId !== undefined) {
 			event.currentNextSubtaskId = currentNextSubtaskId;
 		}
-		return this.repository.append(event);
+		await this.repository.append(event);
+		for (const listener of this.eventListeners) {
+			try {
+				listener(event);
+			} catch {
+				// Extension listeners must not interrupt durable writes.
+			}
+		}
+		this.notify(taskId);
+	}
+
+	private notify(taskId: string): void {
+		for (const listener of this.listeners) {
+			try {
+				listener(taskId);
+			} catch {
+				// UI listeners must not interrupt durable subtask writes.
+			}
+		}
 	}
 }
 

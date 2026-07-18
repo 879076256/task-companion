@@ -1,6 +1,9 @@
 import { App, Modal } from 'obsidian';
+import { installModalBackButton } from './modal-navigation';
 
 export class StatusModal extends Modal {
+	private removeBackButton: (() => void) | null = null;
+
 	constructor(
 		app: App,
 		private readonly pluginName: string,
@@ -11,9 +14,10 @@ export class StatusModal extends Modal {
 	}
 
 	onOpen(): void {
+		this.removeBackButton = installModalBackButton(this, null);
 		this.setTitle(this.pluginName);
 		this.contentEl.createEl('p', {
-			text: 'The phase 1 plugin skeleton is loaded.',
+			text: 'Task Companion 1.0.0 已正常加载。',
 		});
 		if (this.showTechnicalDetails) {
 			this.contentEl.createEl('p', { text: 'Plugin ID: task-companion' });
@@ -21,6 +25,8 @@ export class StatusModal extends Modal {
 	}
 
 	onClose(): void {
+		this.removeBackButton?.();
+		this.removeBackButton = null;
 		this.contentEl.empty();
 		this.onClosed();
 	}

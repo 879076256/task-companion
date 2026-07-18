@@ -1,7 +1,10 @@
 import { App, Modal, Setting } from 'obsidian';
 import type { ExecutionSession } from '../core/sessions/model';
+import { installModalBackButton } from './modal-navigation';
 
 export class SessionHistoryModal extends Modal {
+	private removeBackButton: (() => void) | null = null;
+
 	constructor(
 		app: App,
 		private readonly taskId: string | null,
@@ -13,11 +16,14 @@ export class SessionHistoryModal extends Modal {
 	}
 
 	onOpen(): void {
+		this.removeBackButton = installModalBackButton(this, null);
 		this.contentEl.setText('正在读取会话历史…');
 		void this.renderHistory();
 	}
 
 	onClose(): void {
+		this.removeBackButton?.();
+		this.removeBackButton = null;
 		this.contentEl.empty();
 		this.onClosed();
 	}
@@ -60,7 +66,7 @@ function formatDescription(session: ExecutionSession): string {
 		session.endedEarly ? '提前结束' : '已完成',
 		session.completedWork ? `完成：${session.completedWork}` : null,
 		session.nextAction ? `下一步：${session.nextAction}` : null,
-		session.blockerReason ? `阻塞：${session.blockerReason}` : null,
+		session.blockerReason ? `注意事项：${session.blockerReason}` : null,
 	]
 		.filter((value): value is string => value !== null)
 		.join(' · ');

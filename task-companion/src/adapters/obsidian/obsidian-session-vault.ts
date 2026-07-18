@@ -3,6 +3,8 @@ import { Vault } from 'obsidian';
 export interface SessionLogStorage {
 	read(path: string): Promise<string | null>;
 	append(path: string, content: string): Promise<void>;
+	write(path: string, content: string): Promise<void>;
+	delete(path: string): Promise<void>;
 	list(folder: string): Promise<string[]>;
 }
 
@@ -21,6 +23,17 @@ export class ObsidianSessionVault implements SessionLogStorage {
 			return;
 		}
 		await this.vault.adapter.write(path, content);
+	}
+
+	async write(path: string, content: string): Promise<void> {
+		await this.ensureFolder(parentPath(path));
+		await this.vault.adapter.write(path, content);
+	}
+
+	async delete(path: string): Promise<void> {
+		if (await this.vault.adapter.exists(path)) {
+			await this.vault.adapter.remove(path);
+		}
 	}
 
 	async list(folder: string): Promise<string[]> {

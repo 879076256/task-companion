@@ -3,6 +3,7 @@ type: task-companion-review
 reviewId: "review-fixture"
 taskId: "^tc-2426d8"
 taskTitle: "阶段 6 验收任务"
+targetType: task
 source: "Phase 3 Tasks.md"
 completedAt: 2026-07-16T08:00:00.000Z
 reviewStatus: completed

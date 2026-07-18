@@ -4,11 +4,13 @@ import {
 	categoryLabel,
 	SelectedTask,
 } from '../core/tasks/task-rules';
+import { installModalBackButton } from './modal-navigation';
 
 export class TaskSelectionModal extends Modal {
 	private readonly listEl: HTMLElement;
 	private tasks: SelectedTask[] = [];
 	private query = '';
+	private removeBackButton: (() => void) | null = null;
 
 	constructor(
 		app: App,
@@ -25,6 +27,7 @@ export class TaskSelectionModal extends Modal {
 	}
 
 	onOpen(): void {
+		this.removeBackButton = installModalBackButton(this, null);
 		new Setting(this.contentEl)
 			.setName('搜索')
 			.addSearch((search) =>
@@ -47,6 +50,8 @@ export class TaskSelectionModal extends Modal {
 	}
 
 	onClose(): void {
+		this.removeBackButton?.();
+		this.removeBackButton = null;
 		this.contentEl.empty();
 		this.onClosed();
 	}
@@ -92,19 +97,21 @@ export class TaskSelectionModal extends Modal {
 			new Setting(this.listEl)
 				.setName(removeTrailingBlockId(task.text))
 				.setDesc(buildDescription(selected))
-				.addButton((button) =>
-					button.setButtonText('打开来源').onClick(() => {
+				.addButton((button) => {
+					button.buttonEl.addClass('taskcompanion-title-trailing-action');
+					return button.setButtonText('打开来源').onClick(() => {
 						void this.openSource(selected);
-					}),
-				)
-				.addButton((button) =>
-					button
+					});
+				})
+				.addButton((button) => {
+					button.buttonEl.addClass('taskcompanion-title-trailing-action');
+					return button
 						.setButtonText(`${this.selectLabel} · ${categoryLabel(category)}`)
 						.setCta()
 						.onClick(() => {
 							void this.selectTask(selected);
-						}),
-				);
+						});
+				});
 		}
 	}
 

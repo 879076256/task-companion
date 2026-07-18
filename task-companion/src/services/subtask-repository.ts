@@ -1,5 +1,9 @@
 import type { SessionLogStorage } from '../adapters/obsidian/obsidian-session-vault';
-import { parseSubtaskLog, serializeSubtaskEvent } from '../core/subtasks/log-codec';
+import {
+	parseSubtaskLog,
+	purgeSubtaskFromLog,
+	serializeSubtaskEvent,
+} from '../core/subtasks/log-codec';
 import {
 	emptySubtaskPlan,
 	foldSubtaskEvents,
@@ -30,6 +34,17 @@ export class SubtaskRepository {
 		const content = await this.storage.read(pathForTask(taskId));
 		if (content === null) return emptySubtaskPlan(taskId);
 		return foldSubtaskEvents(taskId, parseSubtaskLog(content).events);
+	}
+
+	async purgeSubtask(taskId: string, subtaskId: string): Promise<number> {
+		const path = pathForTask(taskId);
+		const current = await this.storage.read(path);
+		if (current === null) return 0;
+		const result = purgeSubtaskFromLog(current, taskId, subtaskId);
+		if (result.removedReferences > 0) {
+			await this.storage.write(path, result.content);
+		}
+		return result.removedReferences;
 	}
 }
 

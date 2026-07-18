@@ -27,3 +27,31 @@ export function parseReviewLog(content: string): ReviewLogParseResult {
 	}
 	return { events, invalidLineNumbers };
 }
+
+export function purgeSubtaskReviewsFromLog(
+	content: string,
+	taskId: string,
+	subtaskId: string,
+): { content: string; removed: number; markdownPaths: string[] } {
+	let removed = 0;
+	const markdownPaths = new Set<string>();
+	const lines = content.split('\n').filter((line) => {
+		if (line.trim().length === 0) return true;
+		try {
+			const event = normalizeReviewEvent(JSON.parse(line) as unknown);
+			if (
+				event?.targetType === 'subtask' &&
+				event.taskId === taskId &&
+				event.subtaskId === subtaskId
+			) {
+				removed += 1;
+				if (event.markdownPath) markdownPaths.add(event.markdownPath);
+				return false;
+			}
+		} catch {
+			// Invalid lines are preserved verbatim during a targeted purge.
+		}
+		return true;
+	});
+	return { content: lines.join('\n'), removed, markdownPaths: [...markdownPaths] };
+}

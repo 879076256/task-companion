@@ -23,6 +23,7 @@ const markdownModule = await loadModule('../src/core/reviews/markdown.ts');
 const repositoryModule = await loadModule('../src/services/review-repository.ts');
 const reviewServiceModule = await loadModule('../src/services/review-service.ts');
 const completionModule = await loadModule('../src/services/task-completion-service.ts');
+const subtaskReviewModule = await loadModule('../src/core/reviews/subtask-review.ts');
 
 class MemoryReviewStorage {
 	constructor() {
@@ -43,6 +44,10 @@ class MemoryReviewStorage {
 	async write(path, content) {
 		if (this.failWrite) throw new Error('write failed');
 		this.files.set(path, content);
+	}
+
+	async delete(path) {
+		this.files.delete(path);
 	}
 }
 
@@ -88,11 +93,14 @@ function plan(subtasks = []) {
 
 function reviewEvent(overrides = {}) {
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		eventId: 'event-pending',
 		reviewId: 'review-1',
 		taskId: '^tc-aabbcc',
 		taskTitle: '测试任务',
+		targetType: 'task',
+		subtaskId: null,
+		parentTaskTitle: null,
 		sourcePath: 'Tasks.md',
 		sourceLineNumber: 1,
 		occurredAt: '2026-07-16T08:00:00.000Z',
@@ -189,6 +197,63 @@ test('only a task with sessions or subtask history has an execution archive', ()
 	assert.equal(statsModule.hasExecutionArchive([], plan([subtask()])), true);
 });
 
+test('completed subtask review has its own target identity and only its sessions', () => {
+	const parent = selectedTask().task;
+	const active = subtask({
+		status: 'active',
+		completedAt: null,
+		updatedAt: '2026-07-14T07:00:00.000Z',
+	});
+	const event = subtaskReviewModule.createSubtaskReviewEvent(
+		parent,
+		active,
+		[
+			session({ subtaskId: active.subtaskId }),
+			session({ sessionId: 'parent-session', subtaskId: null }),
+		],
+		plan([active]),
+		Date.parse('2026-07-16T08:00:00.000Z'),
+		(() => {
+			let id = 0;
+			return () => `subtask-review-${++id}`;
+		})(),
+	);
+	assert.equal(event.targetType, 'subtask');
+	assert.equal(event.subtaskId, active.subtaskId);
+	assert.equal(event.parentTaskTitle, '测试任务 ⏫');
+	assert.equal(event.stats.sessionCount, 1);
+	assert.equal(event.stats.completedSubtaskCount, 1);
+	assert.match(markdownModule.buildReviewMarkdown({
+		...event,
+		reviewStatus: 'completed',
+		markdownPath: 'review.md',
+	}), /# 子任务复盘：第一步/u);
+});
+
+test('pending subtask reviews obey completion eligibility while completed archives remain visible', async () => {
+	const storage = new MemoryReviewStorage();
+	const service = new reviewServiceModule.ReviewService(
+		new repositoryModule.ReviewRepository(storage),
+		async () => {},
+	);
+	const pending = reviewEvent({
+		targetType: 'subtask',
+		subtaskId: 'subtask-1',
+		parentTaskTitle: '母任务',
+	});
+	await service.prepareEvent(pending);
+	await service.commitPrepared(pending.eventId);
+	service.setEligibilityChecker(async () => false);
+	assert.deepEqual(await service.list(), []);
+	await service.saveReview(pending, {
+		reviewText: null,
+		wentWell: null,
+		reworkOrBlocker: null,
+		nextAdjustment: null,
+	}, Date.parse('2026-07-16T09:00:00.000Z'));
+	assert.equal((await service.list())[0].reviewStatus, 'completed');
+});
+
 test('review Markdown failure keeps a retryable queue and completed status is appended only after success', async () => {
 	const storage = new MemoryReviewStorage();
 	const repository = new repositoryModule.ReviewRepository(storage);
@@ -243,7 +308,63 @@ test('a failed pre-completion queue save leaves no stale in-memory review', asyn
 	assert.deepEqual(await service.list(), []);
 });
 
-test('simple completion skips review, while archive completion remains complete when review index append fails', async () => {
+test('permanent subtask deletion clears review queues, index rows and readable Markdown in isolation', async () => {
+	const storage = new MemoryReviewStorage();
+	const repository = new repositoryModule.ReviewRepository(storage);
+	let persisted = { events: [], markdown: [] };
+	let id = 0;
+	const service = new reviewServiceModule.ReviewService(
+		repository,
+		async (events, markdown) => {
+			persisted = structuredClone({ events, markdown });
+		},
+		() => `purge-generated-${++id}`,
+	);
+	const target = reviewEvent({
+		eventId: 'target-pending',
+		reviewId: 'target-review',
+		targetType: 'subtask',
+		subtaskId: 'delete-me',
+		parentTaskTitle: '母任务',
+	});
+	await service.prepareEvent(target);
+	await service.commitPrepared(target.eventId);
+	const markdownPath = await service.saveReview(target, {
+		reviewText: '要删除的复盘',
+		wentWell: null,
+		reworkOrBlocker: null,
+		nextAdjustment: null,
+	}, Date.parse('2026-07-16T09:00:00.000Z'));
+	await service.prepareEvent(reviewEvent({
+		eventId: 'target-queued',
+		reviewId: 'target-queued-review',
+		targetType: 'subtask',
+		subtaskId: 'delete-me',
+		parentTaskTitle: '母任务',
+	}));
+	const sibling = reviewEvent({
+		eventId: 'sibling',
+		reviewId: 'sibling-review',
+		targetType: 'subtask',
+		subtaskId: 'keep-me',
+		parentTaskTitle: '母任务',
+	});
+	await service.prepareEvent(sibling);
+	await service.commitPrepared(sibling.eventId);
+	const indexPath = repositoryModule.REVIEW_INDEX_PATH;
+	storage.files.set(indexPath, `${storage.files.get(indexPath)}invalid-review-line\n`);
+
+	assert.ok(await service.purgeSubtask('^tc-aabbcc', 'delete-me') >= 3);
+	assert.deepEqual(persisted.events, []);
+	assert.deepEqual(service.getPendingEvents(), []);
+	assert.equal(storage.files.has(markdownPath), false);
+	assert.match(storage.files.get(indexPath), /invalid-review-line/u);
+	assert.doesNotMatch(storage.files.get(indexPath), /delete-me/u);
+	assert.match(storage.files.get(indexPath), /keep-me/u);
+	assert.deepEqual((await service.list()).map(({ subtaskId }) => subtaskId), ['keep-me']);
+});
+
+test('every confirmed task completion enters review and index failure keeps the task complete', async () => {
 	const scanner = { completed: false, async complete() { this.completed = true; } };
 	const sessionsService = { current: [], async history() { return this.current; } };
 	const subtasksService = {
@@ -253,6 +374,7 @@ test('simple completion skips review, while archive completion remains complete 
 	};
 	const reviews = {
 		prepared: [],
+		async hasPendingTask() { return false; },
 		async prepareEvent(event) { this.prepared.push(event); },
 		async commitPrepared() {},
 		async discardPrepared() {},
@@ -266,8 +388,8 @@ test('simple completion skips review, while archive completion remains complete 
 		() => `generated-${++id}`,
 	);
 	const simple = await service.complete(selectedTask(), null, Date.parse('2026-07-16T08:00:00.000Z'));
-	assert.deepEqual(simple, { reviewQueued: false, reviewIndexWritePending: false });
-	assert.equal(reviews.prepared.length, 0);
+	assert.deepEqual(simple, { reviewQueued: true, reviewIndexWritePending: false });
+	assert.equal(reviews.prepared.length, 1);
 
 	scanner.completed = false;
 	sessionsService.current = [session()];
@@ -276,7 +398,7 @@ test('simple completion skips review, while archive completion remains complete 
 	assert.equal(scanner.completed, true);
 	assert.equal(archived.reviewQueued, true);
 	assert.equal(archived.reviewIndexWritePending, true);
-	assert.equal(reviews.prepared.length, 1);
+	assert.equal(reviews.prepared.length, 2);
 });
 
 test('unfinished subtasks require an explicit resolution and cancel-all is reflected in review stats', async () => {
@@ -294,6 +416,7 @@ test('unfinished subtasks require an explicit resolution and cancel-all is refle
 	};
 	const reviews = {
 		prepared: [],
+		async hasPendingTask() { return false; },
 		async prepareEvent(event) { this.prepared.push(event); },
 		async commitPrepared() {},
 		async discardPrepared() {},
@@ -319,6 +442,8 @@ test('the viewable JSONL review fixture parses without invalid lines', async () 
 	const result = codecModule.parseReviewLog(content);
 	assert.deepEqual(result.invalidLineNumbers, []);
 	assert.equal(result.events[0].reviewStatus, 'pending');
+	assert.equal(result.events[0].schemaVersion, 2);
+	assert.equal(result.events[0].targetType, 'task');
 	assert.equal(result.events[0].stats.sessionCount, 2);
 });
 

@@ -9,7 +9,9 @@ test('manifest identifies the isolated Task Companion skeleton', async () => {
 
 	assert.equal(manifest.id, 'task-companion');
 	assert.equal(manifest.name, 'Task Companion');
-	assert.equal(manifest.version, '0.0.0');
+	assert.equal(manifest.version, '1.0.0');
+	assert.equal(manifest.author, 'teacher Zhang');
+	assert.equal(manifest.isDesktopOnly, true);
 });
 
 test('Phase 1 source contains no timer, network, or task operations', async () => {
@@ -54,4 +56,14 @@ test('plugin lifecycle registers a command and closes active modals on unload', 
 	assert.match(source, /for \(const modal of Array\.from\(this\.activeModals\)\)/);
 	assert.match(source, /modal\.close\(\)/);
 	assert.match(source, /this\.activeModals\.clear\(\)/);
+});
+
+test('release test modal reports the current product version without skeleton copy', async () => {
+	const source = await readFile(
+		new URL('../src/ui/status-modal.ts', import.meta.url),
+		'utf8',
+	);
+
+	assert.match(source, /Task Companion 1\.0\.0 已正常加载。/u);
+	assert.doesNotMatch(source, /phase 1|skeleton/iu);
 });

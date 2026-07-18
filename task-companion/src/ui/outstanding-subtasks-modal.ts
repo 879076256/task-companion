@@ -1,8 +1,11 @@
 import { App, Modal, Setting } from 'obsidian';
 import type { Subtask } from '../core/subtasks/model';
 import type { OutstandingSubtaskResolution } from '../services/task-completion-service';
+import { installModalBackButton } from './modal-navigation';
 
 export class OutstandingSubtasksModal extends Modal {
+	private removeBackButton: (() => void) | null = null;
+
 	constructor(
 		app: App,
 		private readonly subtasks: Subtask[],
@@ -17,6 +20,7 @@ export class OutstandingSubtasksModal extends Modal {
 	}
 
 	onOpen(): void {
+		this.removeBackButton = installModalBackButton(this, null);
 		this.contentEl.createEl('p', {
 			text: '完成母任务前，请明确处理剩余步骤：',
 		});
@@ -45,6 +49,8 @@ export class OutstandingSubtasksModal extends Modal {
 	}
 
 	onClose(): void {
+		this.removeBackButton?.();
+		this.removeBackButton = null;
 		this.contentEl.empty();
 		this.onClosed();
 	}

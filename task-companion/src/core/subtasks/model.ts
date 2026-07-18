@@ -8,6 +8,7 @@ export type SubtaskEventType =
 	| 'reordered'
 	| 'completed'
 	| 'cancelled'
+	| 'deleted'
 	| 'reopened'
 	| 'current-next-set';
 
@@ -52,7 +53,10 @@ export function foldSubtaskEvents(
 	let currentNextSubtaskId: string | null = null;
 	for (const event of events) {
 		if (event.taskId !== taskId) continue;
-		for (const subtask of event.subtasks) byId.set(subtask.subtaskId, subtask);
+		for (const subtask of event.subtasks) {
+			if (event.eventType === 'deleted') byId.delete(subtask.subtaskId);
+			else byId.set(subtask.subtaskId, subtask);
+		}
 		if ('currentNextSubtaskId' in event) {
 			currentNextSubtaskId = event.currentNextSubtaskId ?? null;
 		}
@@ -168,6 +172,7 @@ function isEventType(value: unknown): value is SubtaskEventType {
 		value === 'reordered' ||
 		value === 'completed' ||
 		value === 'cancelled' ||
+		value === 'deleted' ||
 		value === 'reopened' ||
 		value === 'current-next-set'
 	);

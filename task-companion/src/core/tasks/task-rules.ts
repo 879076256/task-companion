@@ -3,7 +3,8 @@ export type TaskCategory =
 	| 'today'
 	| 'important'
 	| 'today-important'
-	| 'recurring';
+	| 'recurring'
+	| 'pending';
 
 export interface ParsedTask {
 	id: string;
@@ -18,6 +19,8 @@ export interface ParsedTask {
 	start: string | null;
 	scheduled: string | null;
 	due: string | null;
+	recurrence: string | null;
+	completion: string | null;
 	blockId: string | null;
 }
 
@@ -29,6 +32,8 @@ export interface SelectedTask {
 const TASK_LINE_PATTERN = /^\s*[-*]\s+\[([ xX-])\]\s+(.+?)\s*$/u;
 const PRIORITY_PATTERN = /(⏫|🔼|🔽|⏬)/u;
 const BLOCK_ID_PATTERN = /(?:^|\s)(\^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)\s*$/u;
+const HABIT_CHECKIN_PATTERN =
+	/(?:🛏\uFE0F?\s*早起|📖\uFE0F?\s*(?:reading|阅读|读书)|🏃[\u{1F3FB}-\u{1F3FF}]?\s*运动)/iu;
 
 export function parseTaskLine(
 	line: string,
@@ -57,6 +62,8 @@ export function parseTaskLine(
 		start: extractDate(text, /🛫\s*(\d{4}-\d{2}-\d{2})/u),
 		scheduled: extractDate(text, /⏳\s*(\d{4}-\d{2}-\d{2})/u),
 		due: extractDate(text, /📅\s*(\d{4}-\d{2}-\d{2})/u),
+		recurrence: extractRecurrence(text),
+		completion: extractDate(text, /✅\s*(\d{4}-\d{2}-\d{2})/u),
 		blockId,
 	};
 }
@@ -70,13 +77,23 @@ export function filterFormalTasks(tasks: readonly ParsedTask[]): ParsedTask[] {
 	);
 }
 
+export function isHabitCheckinText(text: string): boolean {
+	return HABIT_CHECKIN_PATTERN.test(text);
+}
+
 export function isTodayTask(task: ParsedTask, today: string): boolean {
 	if (!filterFormalTasks([task]).length || !isDateString(today)) return false;
-	if (task.scheduled === today || task.due === today) return true;
+	if (task.scheduled && task.scheduled <= today) return true;
+	if (task.due === today) return true;
 	if (task.due && task.due < today) return true;
 	if (task.start && task.due) return task.start <= today && today <= task.due;
 	if (task.start && !task.due) return task.start <= today;
 	return false;
+}
+
+function extractRecurrence(text: string): string | null {
+	const value = /🔁\s*([^📅⏳🛫➕✅❌]+)/u.exec(text)?.[1]?.trim();
+	return value || null;
 }
 
 export function isOverdueTask(task: ParsedTask, today: string): boolean {
@@ -110,6 +127,7 @@ export function selectTasks(
 		else if (todayTask) category = 'today';
 		else if (important) category = 'important';
 		else if (task.hasRecurrence) category = 'recurring';
+		else category = 'pending';
 
 		if (category) {
 			selected.push({ task, category });
@@ -129,6 +147,8 @@ export function categoryLabel(category: TaskCategory): string {
 			return '今日待办＋重点任务';
 		case 'recurring':
 			return '日常任务';
+		case 'pending':
+			return '待推进任务';
 	}
 }
 

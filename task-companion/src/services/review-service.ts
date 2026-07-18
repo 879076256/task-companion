@@ -23,15 +23,42 @@ export interface ReviewRetryResult {
 	markdown: number;
 }
 
+export type ReviewEligibilityChecker = (review: ReviewEvent) => Promise<boolean>;
+export type ReviewChangeListener = () => void;
+export type ReviewEventListener = (event: ReviewEvent) => void;
+
 export class ReviewService {
 	private pendingEvents: ReviewEvent[] = [];
 	private pendingMarkdown: PendingReviewMarkdownWrite[] = [];
+	private eligibilityChecker: ReviewEligibilityChecker = async () => true;
+	private readonly listeners = new Set<ReviewChangeListener>();
+	private readonly eventListeners = new Set<ReviewEventListener>();
+	private readonly purgedSubtasks = new Set<string>();
+	private readonly activeWrites = new Set<Promise<void>>();
 
 	constructor(
 		private readonly repository: ReviewRepository,
 		private readonly persistPending: PendingReviewPersistence,
 		private readonly idFactory: () => string = () => crypto.randomUUID(),
 	) {}
+
+	setEligibilityChecker(checker: ReviewEligibilityChecker): void {
+		this.eligibilityChecker = checker;
+	}
+
+	subscribe(listener: ReviewChangeListener): () => void {
+		this.listeners.add(listener);
+		return () => this.listeners.delete(listener);
+	}
+
+	onEvent(listener: ReviewEventListener): () => void {
+		this.eventListeners.add(listener);
+		return () => this.eventListeners.delete(listener);
+	}
+
+	notifyEligibilityChanged(): void {
+		this.notify();
+	}
 
 	restorePending(events: unknown, markdown: unknown): void {
 		this.pendingEvents = Array.isArray(events)
@@ -60,6 +87,7 @@ export class ReviewService {
 	}
 
 	async prepareEvent(event: ReviewEvent): Promise<void> {
+		if (this.isPurged(event)) return;
 		const added = !this.pendingEvents.some(
 			({ eventId }) => eventId === event.eventId,
 		);
@@ -68,6 +96,7 @@ export class ReviewService {
 		}
 		try {
 			await this.persist();
+			this.notify();
 		} catch (error) {
 			if (added) {
 				this.pendingEvents = this.pendingEvents.filter(
@@ -81,11 +110,21 @@ export class ReviewService {
 	async commitPrepared(eventId: string): Promise<void> {
 		const event = this.pendingEvents.find((candidate) => candidate.eventId === eventId);
 		if (!event) return;
-		await this.repository.append(event);
+		if (this.isPurged(event)) {
+			this.pendingEvents = this.pendingEvents.filter(
+				(candidate) => candidate.eventId !== eventId,
+			);
+			await this.persist();
+			this.notify();
+			return;
+		}
+		await this.trackWrite(this.repository.append(event));
+		this.notifyEvent(event);
 		this.pendingEvents = this.pendingEvents.filter(
 			(candidate) => candidate.eventId !== eventId,
 		);
 		await this.persist();
+		this.notify();
 	}
 
 	async discardPrepared(eventId: string): Promise<void> {
@@ -93,13 +132,46 @@ export class ReviewService {
 			(candidate) => candidate.eventId !== eventId,
 		);
 		await this.persist();
+		this.notify();
 	}
 
 	async list(): Promise<ReviewEvent[]> {
-		return foldReviewEvents([
+		const reviews = foldReviewEvents([
 			...(await this.repository.list()),
 			...this.pendingEvents,
 		]);
+		const visible = await Promise.all(
+			reviews.map(async (review) => ({
+				review,
+				eligible:
+					review.reviewStatus === 'completed' ||
+					(await this.eligibilityChecker(review)),
+			})),
+		);
+		return visible.filter(({ eligible }) => eligible).map(({ review }) => review);
+	}
+
+	async hasPendingSubtask(taskId: string, subtaskId: string): Promise<boolean> {
+		return this.hasPendingTarget(taskId, subtaskId);
+	}
+
+	async hasPendingTask(taskId: string): Promise<boolean> {
+		return this.hasPendingTarget(taskId, null);
+	}
+
+	private async hasPendingTarget(
+		taskId: string,
+		subtaskId: string | null,
+	): Promise<boolean> {
+		return foldReviewEvents([
+			...(await this.repository.list()),
+			...this.pendingEvents,
+		]).some(
+			(review) =>
+				review.reviewStatus === 'pending' &&
+				review.taskId === taskId &&
+				review.subtaskId === subtaskId,
+		);
 	}
 
 	async saveReview(
@@ -132,6 +204,7 @@ export class ReviewService {
 		this.pendingMarkdown.push(write);
 		await this.persist();
 		await this.retryMarkdown(write.reviewId);
+		this.notify();
 		return path;
 	}
 
@@ -149,17 +222,83 @@ export class ReviewService {
 		return { events, markdown };
 	}
 
+	async purgeSubtask(taskId: string, subtaskId: string): Promise<number> {
+		this.purgedSubtasks.add(subtaskKey(taskId, subtaskId));
+		await Promise.all(
+			[...this.activeWrites].map((write) => write.catch(() => undefined)),
+		);
+		const matches = (event: ReviewEvent): boolean =>
+			event.targetType === 'subtask' &&
+			event.taskId === taskId &&
+			event.subtaskId === subtaskId;
+		const removedEvents = this.pendingEvents.filter(matches);
+		const removedMarkdown = this.pendingMarkdown.filter((write) =>
+			matches(write.completedEvent),
+		);
+		const nextEvents = this.pendingEvents.filter((event) => !matches(event));
+		const nextMarkdown = this.pendingMarkdown.filter(
+			(write) => !matches(write.completedEvent),
+		);
+		await this.persistPending(
+			nextEvents.map(cloneEvent),
+			nextMarkdown.map((write) => ({
+				...write,
+				completedEvent: cloneEvent(write.completedEvent),
+			})),
+		);
+		this.pendingEvents = nextEvents;
+		this.pendingMarkdown = nextMarkdown;
+		const removedStored = await this.repository.purgeSubtask(
+			taskId,
+			subtaskId,
+			removedMarkdown.map(({ path }) => path),
+		);
+		this.notify();
+		return removedEvents.length + removedMarkdown.length + removedStored;
+	}
+
 	private async retryMarkdown(reviewId: string): Promise<void> {
 		const write = this.pendingMarkdown.find(
 			(candidate) => candidate.reviewId === reviewId,
 		);
 		if (!write) return;
-		await this.repository.writeMarkdown(write.path, write.content);
-		await this.repository.append(write.completedEvent);
+		if (this.isPurged(write.completedEvent)) {
+			this.pendingMarkdown = this.pendingMarkdown.filter(
+				(candidate) => candidate.reviewId !== reviewId,
+			);
+			await this.persist();
+			this.notify();
+			return;
+		}
+		await this.trackWrite(
+			(async () => {
+				await this.repository.writeMarkdown(write.path, write.content);
+				await this.repository.append(write.completedEvent);
+			})(),
+		);
+		this.notifyEvent(write.completedEvent);
 		this.pendingMarkdown = this.pendingMarkdown.filter(
 			(candidate) => candidate.reviewId !== reviewId,
 		);
 		await this.persist();
+		this.notify();
+	}
+
+	private async trackWrite(write: Promise<void>): Promise<void> {
+		this.activeWrites.add(write);
+		try {
+			await write;
+		} finally {
+			this.activeWrites.delete(write);
+		}
+	}
+
+	private isPurged(event: ReviewEvent): boolean {
+		return (
+			event.targetType === 'subtask' &&
+			event.subtaskId !== null &&
+			this.purgedSubtasks.has(subtaskKey(event.taskId, event.subtaskId))
+		);
 	}
 
 	private persist(): Promise<void> {
@@ -168,6 +307,30 @@ export class ReviewService {
 			this.getPendingMarkdown(),
 		);
 	}
+
+	private notify(): void {
+		for (const listener of this.listeners) {
+			try {
+				listener();
+			} catch {
+				// UI listeners must not interrupt durable review writes.
+			}
+		}
+	}
+
+	private notifyEvent(event: ReviewEvent): void {
+		for (const listener of this.eventListeners) {
+			try {
+				listener(cloneEvent(event));
+			} catch {
+				// Extension listeners must not interrupt durable review writes.
+			}
+		}
+	}
+}
+
+function subtaskKey(taskId: string, subtaskId: string): string {
+	return `${taskId}\u0000${subtaskId}`;
 }
 
 function cloneEvent(event: ReviewEvent): ReviewEvent {

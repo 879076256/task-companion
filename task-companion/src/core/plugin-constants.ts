@@ -9,3 +9,4 @@ export const MANAGE_SUBTASKS_COMMAND_ID = 'manage-subtasks';
 export const COMPLETE_TASK_COMMAND_ID = 'complete-task';
 export const REVIEW_QUEUE_COMMAND_ID = 'open-review-queue';
 export const RETRY_REVIEW_WRITES_COMMAND_ID = 'retry-review-writes';
+export const MANAGE_CONTROLLED_SCRIPTS_COMMAND_ID = 'manage-controlled-scripts';

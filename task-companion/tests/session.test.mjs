@@ -56,6 +56,14 @@ class MemoryStorage {
 		this.files.set(path, `${this.files.get(path) ?? ''}${content}`);
 	}
 
+	async write(path, content) {
+		this.files.set(path, content);
+	}
+
+	async delete(path) {
+		this.files.delete(path);
+	}
+
 	async list(folder) {
 		return [...this.files.keys()].filter((path) => path.startsWith(`${folder}/`));
 	}
@@ -186,4 +194,60 @@ test('history and current next action stay isolated by stable task ID', async ()
 	);
 	assert.equal(await repository.getCurrentNextAction('^tc-aaaaaa'), 'A next');
 	assert.equal(await repository.getCurrentNextAction('^tc-bbbbbb'), 'B next');
+});
+
+test('session service emits task-scoped changes and unsubscribe stops updates', async () => {
+	const storage = new MemoryStorage();
+	const service = new serviceModule.SessionService(
+		new repositoryModule.SessionRepository(storage),
+		async () => {},
+	);
+	const changedTaskIds = [];
+	const unsubscribe = service.subscribe((taskId) => changedTaskIds.push(taskId));
+	const record = makeSession();
+
+	await service.prepare(record);
+	await service.finalize(record.sessionId, {
+		completedWork: null,
+		nextAction: '显示在主页',
+		blockerReason: null,
+	});
+	unsubscribe();
+	await service.prepare(makeSession({ sessionId: 'session-2' }));
+
+	assert.deepEqual(changedTaskIds, [
+		'^tc-aabbcc',
+		'^tc-aabbcc',
+		'^tc-aabbcc',
+	]);
+});
+
+test('permanent subtask deletion clears stored and pending time without touching other targets', async () => {
+	const storage = new MemoryStorage();
+	const repository = new repositoryModule.SessionRepository(storage);
+	let persisted = [];
+	const service = new serviceModule.SessionService(repository, async (pending) => {
+		persisted = structuredClone(pending);
+	});
+	await repository.append(makeSession({ sessionId: 'delete-stored', subtaskId: 'delete-me' }));
+	await repository.append(makeSession({ sessionId: 'keep-sibling', subtaskId: 'keep-me' }));
+	await repository.append(makeSession({
+		sessionId: 'keep-other-task',
+		taskId: '^tc-bbbbbb',
+		subtaskId: 'delete-me',
+	}));
+	const path = [...storage.files.keys()][0];
+	storage.files.set(path, `${storage.files.get(path)}invalid-session-line\n`);
+	await service.prepare(makeSession({ sessionId: 'delete-pending', subtaskId: 'delete-me' }));
+
+	assert.equal(await service.purgeSubtask('^tc-aabbcc', 'delete-me'), 2);
+	assert.deepEqual(persisted, []);
+	assert.deepEqual(service.getPending(), []);
+	assert.deepEqual(
+		(await repository.readByTask('^tc-aabbcc')).map(({ sessionId }) => sessionId),
+		['keep-sibling'],
+	);
+	assert.equal((await repository.readByTask('^tc-bbbbbb'))[0].sessionId, 'keep-other-task');
+	assert.match(storage.files.get(path), /invalid-session-line/u);
+	assert.doesNotMatch(storage.files.get(path), /delete-stored/u);
 });
