@@ -61,3 +61,13 @@
 - [x] Release 为正式版而非草稿或预发布。
 - [x] Release 同时提供 ZIP、三个独立安装文件和 SHA-256 清单。
 - [x] 远程回读确认仓库公开、默认分支为 main、五个资产名称和大小正确。
+
+## 1.0.1 Community 自动审核修正
+
+- [x] 清单描述移除自动审核禁止的单词 “Obsidian”。
+- [x] 根目录与插件目录 `manifest.json`、`versions.json` 保持一致。
+- [x] package、lockfile、安装说明、版本展示和测试同步升级为 `1.0.1`。
+- [x] `versions.json` 保留 `1.0.0` 并新增 `1.0.1` 对最低应用版本的映射。
+- [x] 自动测试明确禁止清单描述再次包含 “Obsidian”。
+- [x] production build、typecheck、零警告 lint、79 项核心测试、5 项发布测试和 3 项测试 Vault 校验通过。
+- [ ] `1.0.1` 提交推送、精确标签、正式 Release 和远程附件回读完成。

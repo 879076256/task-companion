@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 
 const projectRoot = new URL('../', import.meta.url);
 const repositoryRoot = new URL('../../', import.meta.url);
+const expectedVersion = '1.0.1';
 const execFileAsync = promisify(execFile);
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const sha256 = (content) => createHash('sha256').update(content).digest('hex');
@@ -37,12 +38,16 @@ test('release metadata is stable and desktop-only', async () => {
 		readJson(new URL('versions.json', projectRoot)),
 	]);
 
-	assert.equal(manifest.version, '1.0.0');
+	assert.equal(manifest.version, expectedVersion);
 	assert.equal(packageJson.version, manifest.version);
 	assert.equal(manifest.author, 'teacher Zhang');
 	assert.equal(packageJson.author, manifest.author);
 	assert.equal(manifest.isDesktopOnly, true);
-	assert.deepEqual(versions, { '1.0.0': manifest.minAppVersion });
+	assert.deepEqual(versions, {
+		'1.0.0': manifest.minAppVersion,
+		[expectedVersion]: manifest.minAppVersion,
+	});
+	assert.doesNotMatch(manifest.description, /obsidian/iu);
 });
 
 test('community directory metadata is present at repository root and synchronized', async () => {
@@ -64,7 +69,9 @@ test('community directory metadata is present at repository root and synchronize
 
 test('release ZIP contains exactly the three production artifacts', async () => {
 	const releaseRoot = new URL('release/', projectRoot);
-	const zip = await readFile(new URL('task-companion-1.0.0.zip', releaseRoot));
+	const zip = await readFile(
+		new URL(`task-companion-${expectedVersion}.zip`, releaseRoot),
+	);
 	const entries = readStoredZip(zip);
 	const expectedNames = ['main.js', 'manifest.json', 'styles.css'];
 
@@ -81,7 +88,7 @@ test('release ZIP contains exactly the three production artifacts', async () => 
 test('release checksums cover staged artifacts and ZIP', async () => {
 	const releaseRoot = new URL('release/', projectRoot);
 	const checksumText = await readFile(
-		new URL('SHA256SUMS-1.0.0.txt', releaseRoot),
+		new URL(`SHA256SUMS-${expectedVersion}.txt`, releaseRoot),
 		'utf8',
 	);
 	const checksums = new Map(
@@ -91,10 +98,10 @@ test('release checksums cover staged artifacts and ZIP', async () => {
 		}),
 	);
 	const expectedPaths = [
-		'task-companion-1.0.0/main.js',
-		'task-companion-1.0.0/manifest.json',
-		'task-companion-1.0.0/styles.css',
-		'task-companion-1.0.0.zip',
+		`task-companion-${expectedVersion}/main.js`,
+		`task-companion-${expectedVersion}/manifest.json`,
+		`task-companion-${expectedVersion}/styles.css`,
+		`task-companion-${expectedVersion}.zip`,
 	];
 
 	assert.deepEqual([...checksums.keys()].sort(), expectedPaths.sort());
@@ -107,7 +114,10 @@ test('release checksums cover staged artifacts and ZIP', async () => {
 });
 
 test('rebuilding the release produces the same ZIP hash', async () => {
-	const zipUrl = new URL('release/task-companion-1.0.0.zip', projectRoot);
+	const zipUrl = new URL(
+		`release/task-companion-${expectedVersion}.zip`,
+		projectRoot,
+	);
 	const before = sha256(await readFile(zipUrl));
 
 	await execFileAsync(process.execPath, ['scripts/build-release.mjs'], {

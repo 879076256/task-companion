@@ -16,7 +16,7 @@ test('test vault contains the three Obsidian plugin artifacts', async () => {
 
 	const parsedManifest = JSON.parse(manifest);
 	assert.equal(parsedManifest.id, 'task-companion');
-	assert.equal(parsedManifest.version, '1.0.0');
+	assert.equal(parsedManifest.version, '1.0.1');
 	assert.equal(parsedManifest.author, 'teacher Zhang');
 	assert.equal(parsedManifest.isDesktopOnly, true);
 	assert.match(bundle, /open-test-modal/);
@@ -32,12 +32,12 @@ test('test vault contains the three Obsidian plugin artifacts', async () => {
 	assert.match(styles, /@media \(max-width: 520px\)/u);
 });
 
-test('test vault is installed byte-for-byte from the 1.0.0 release', async () => {
+test('test vault is installed byte-for-byte from the 1.0.1 release', async () => {
 	for (const filename of ['main.js', 'manifest.json', 'styles.css']) {
 		const [installed, released] = await Promise.all([
 			readFile(new URL(filename, installedRoot)),
 			readFile(
-				new URL(`../release/task-companion-1.0.0/${filename}`, import.meta.url),
+				new URL(`../release/task-companion-1.0.1/${filename}`, import.meta.url),
 			),
 		]);
 		assert.deepEqual(installed, released);

@@ -1,7 +1,7 @@
 {
 	"name": "task-companion",
-	"version": "1.0.0",
-	"description": "A local-first Obsidian task execution companion.",
+	"version": "1.0.1",
+	"description": "A local-first task execution companion.",
 	"author": "teacher Zhang",
 	"main": "main.js",
 	"type": "module",
