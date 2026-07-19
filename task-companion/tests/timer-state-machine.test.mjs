@@ -154,6 +154,43 @@ test('a completed break returns to 25 minute focus while early or other timers d
 	}, 2), null);
 });
 
+test('prepared pomodoro stages wait for an explicit start and survive reloads', () => {
+	const prepared = machine.prepareTimer(machine.createIdleState(), {
+		mode: 'custom',
+		durationSeconds: 300,
+		sessionId: 'prepared-break',
+		subtaskId: 'subtask-a',
+		purpose: 'break',
+	});
+	assert.equal(prepared.ok, true);
+	assert.deepEqual(prepared.state, {
+		status: 'ready',
+		sessionId: 'prepared-break',
+		mode: 'custom',
+		durationSeconds: 300,
+		subtaskId: 'subtask-a',
+		purpose: 'break',
+	});
+	assert.equal(machine.getRemainingSeconds(prepared.state, 999_999), 300);
+	assert.deepEqual(
+		serialization.restoreTimerState(prepared.state, 999_999),
+		prepared.state,
+	);
+
+	const started = machine.startTimer(prepared.state, {
+		mode: 'focus-25',
+		nowMs: 999_999,
+		sessionId: 'ignored',
+	});
+	assert.equal(started.ok, true);
+	assert.equal(started.state.status, 'running');
+	assert.equal(started.state.sessionId, 'prepared-break');
+	assert.equal(started.state.mode, 'custom');
+	assert.equal(started.state.durationSeconds, 300);
+	assert.equal(started.state.purpose, 'break');
+	assert.equal(started.state.startedAtMs, 999_999);
+});
+
 test('break timers emit stage completion but never task execution sessions', () => {
 	const service = new timerServiceModule.TimerService({ capture() {} });
 	const sessions = [];
@@ -174,6 +211,16 @@ test('break timers emit stage completion but never task execution sessions', () 
 	assert.equal(completions.length, 1);
 	assert.equal(completions[0].purpose, 'break');
 	assert.deepEqual(sessions, []);
+});
+
+test('timer service prepares the next stage without starting its countdown', () => {
+	const service = new timerServiceModule.TimerService({ capture() {} });
+	const prepared = service.prepare('custom', 300, 'break');
+	assert.equal(prepared.ok, true);
+	assert.equal(service.getState().status, 'ready');
+	assert.equal(service.getRemainingSeconds(100_000), 300);
+	assert.equal(service.serialize().status, 'ready');
+	service.dispose();
 });
 
 test('restores running and paused sessions across reloads', () => {
@@ -265,21 +312,35 @@ test('timer control exposes a validated custom minute input', async () => {
 	assert.match(source, /customDuration \* 60/u);
 });
 
-test('completion alert is wired to modal, chime, background notification and automatic cycling', async () => {
+test('completion alert prepares the next manual-start stage and wires modal, chime and background notification', async () => {
 	const [main, notifier] = await Promise.all([
 		readFile(new URL('../src/main.ts', import.meta.url), 'utf8'),
 		readFile(new URL('../src/ui/timer-completion-notifier.ts', import.meta.url), 'utf8'),
 	]);
 	assert.match(main, /onTimerCompleted/u);
 	assert.match(main, /resolvePomodoroCompletion/u);
+	assert.match(main, /timerService\.prepare/u);
 	assert.match(main, /decision\.next\.purpose/u);
 	assert.match(main, /专注完成/u);
 	assert.match(main, /休息结束/u);
+	assert.match(main, /点击时间开始下一轮 25 分钟专注/u);
 	assert.match(notifier, /new AudioContext\(\)/u);
 	assert.match(notifier, /createOscillator/u);
 	assert.match(notifier, /window\.Notification/u);
 	assert.match(notifier, /document\.hasFocus\(\)/u);
 	assert.match(notifier, /知道了/u);
+});
+
+test('current task cumulative investment always uses total minutes', async () => {
+	const embedded = await readFile(
+		new URL('../src/ui/embedded-code-block.ts', import.meta.url),
+		'utf8',
+	);
+	assert.match(
+		embedded,
+		/return `\$\{Math\.floor\(Math\.max\(0, seconds\) \/ 60\)\}分钟`;/u,
+	);
+	assert.doesNotMatch(embedded, /return hours > 0/u);
 });
 
 test('timer service notifies homepage listeners when task identity or target changes', () => {

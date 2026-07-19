@@ -1,7 +1,7 @@
 {
 	"id": "task-companion",
 	"name": "Task Companion",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"minAppVersion": "1.1.0",
 	"description": "Local-first task execution, focus sessions, reviews, and reusable experience.",
 	"author": "teacher Zhang",

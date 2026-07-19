@@ -1,6 +1,7 @@
 import {
 	FinishedTimerState,
 	PausedTimerState,
+	ReadyTimerState,
 	RunningTimerState,
 	TimerMode,
 	TimerState,
@@ -14,6 +15,27 @@ export function restoreTimerState(value: unknown, nowMs: number): TimerState {
 
 	if (value.status === 'idle') {
 		return createIdleState();
+	}
+
+	if (
+		value.status === 'ready' &&
+		typeof value.sessionId === 'string' &&
+		value.sessionId.length > 0 &&
+		isTimerMode(value.mode) &&
+		isPositiveInteger(value.durationSeconds)
+	) {
+		const state: ReadyTimerState = {
+			status: 'ready',
+			sessionId: value.sessionId,
+			mode: value.mode,
+			durationSeconds: value.durationSeconds,
+			subtaskId:
+				typeof value.subtaskId === 'string' && value.subtaskId.length > 0
+					? value.subtaskId
+					: null,
+			...(value.purpose === 'break' ? { purpose: 'break' as const } : {}),
+		};
+		return state;
 	}
 
 	const session = readSession(value);

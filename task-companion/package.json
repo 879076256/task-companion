@@ -1,6 +1,6 @@
 {
 	"name": "task-companion",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"description": "A local-first task execution companion.",
 	"author": "teacher Zhang",
 	"main": "main.js",

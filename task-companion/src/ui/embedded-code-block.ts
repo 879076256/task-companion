@@ -811,6 +811,10 @@ class DataViewChild extends MarkdownRenderChild {
 		const state = this.services.timerService.getState();
 		const label = state.status === 'idle'
 			? '点击时间开始'
+			: state.status === 'ready'
+				? state.purpose === 'break'
+					? '休息已准备 · 点击开始'
+					: '专注已准备 · 点击开始'
 			: state.status === 'running'
 				? state.purpose === 'break'
 					? '正在休息 · 点击暂停'
@@ -858,9 +862,7 @@ function currentExecutionTaskTitle(text: string): string {
 }
 
 function formatDuration(seconds: number): string {
-	const hours = Math.floor(seconds / 3_600);
-	const minutes = Math.floor((seconds % 3_600) / 60);
-	return hours > 0 ? `${hours} 小时 ${minutes} 分钟` : `${minutes} 分钟`;
+	return `${Math.floor(Math.max(0, seconds) / 60)}分钟`;
 }
 
 function formatTimer(seconds: number): string {

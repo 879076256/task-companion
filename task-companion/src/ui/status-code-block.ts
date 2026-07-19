@@ -63,11 +63,13 @@ function timerStatusLabel(state: TimerState): string {
 	switch (state.status) {
 		case 'idle':
 			return '任务空闲中';
+		case 'ready':
+			return state.purpose === 'break' ? '休息待开始' : '专注待开始';
 		case 'running':
-			return '正在专注';
+			return state.purpose === 'break' ? '正在休息' : '正在专注';
 		case 'paused':
-			return '已暂停';
+			return state.purpose === 'break' ? '休息已暂停' : '已暂停';
 		case 'finished':
-			return '专注完成';
+			return state.purpose === 'break' ? '休息结束' : '专注完成';
 	}
 }

@@ -1,4 +1,4 @@
-export type TimerActivity = 'idle' | 'running' | 'paused' | 'finished';
+export type TimerActivity = 'idle' | 'ready' | 'running' | 'paused' | 'finished';
 export type TaskSelectionAction = 'bind-new' | 'open-current' | 'reject-switch';
 
 export function resolveTaskSelectionAction(
@@ -6,6 +6,12 @@ export function resolveTaskSelectionAction(
 	currentTaskId: string | null,
 	selectedTaskId: string,
 ): TaskSelectionAction {
-	if (timerStatus !== 'running' && timerStatus !== 'paused') return 'bind-new';
+	if (
+		timerStatus !== 'ready' &&
+		timerStatus !== 'running' &&
+		timerStatus !== 'paused'
+	) {
+		return 'bind-new';
+	}
 	return currentTaskId === selectedTaskId ? 'open-current' : 'reject-switch';
 }

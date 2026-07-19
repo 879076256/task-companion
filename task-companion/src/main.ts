@@ -620,7 +620,11 @@ export default class TaskCompanionPlugin extends Plugin {
 			return false;
 		}
 		if (action === 'open-current') {
-			if (state.status === 'running' || state.status === 'paused') {
+			if (
+				state.status === 'ready' ||
+				state.status === 'running' ||
+				state.status === 'paused'
+			) {
 				new Notice('该任务正在计时，可直接在“当前任务”卡片操作。');
 			} else {
 				await this.chooseExecutionTarget(selected, 'timer', onBack);
@@ -871,14 +875,13 @@ export default class TaskCompanionPlugin extends Plugin {
 		);
 		if (!decision) return;
 		this.settings.completedPomodoros = decision.completedPomodoros;
-		const transition = this.timerService.start(
+		const transition = this.timerService.prepare(
 			decision.next.mode,
-			Date.now(),
 			decision.next.durationSeconds,
 			decision.next.purpose,
 		);
 		if (!transition.ok) {
-			new Notice('本轮计时已完成，但下一阶段未能自动开始。');
+			new Notice('本轮计时已完成，但下一阶段未能准备。');
 			void this.saveSettings();
 			return;
 		}
@@ -886,12 +889,12 @@ export default class TaskCompanionPlugin extends Plugin {
 			const breakMinutes = (decision.next.durationSeconds ?? 0) / 60;
 			this.timerCompletionNotifier?.notify(
 				'专注完成',
-				`第 ${decision.completedPomodoros} 次专注完成，已自动开始 ${breakMinutes} 分钟休息。`,
+				`第 ${decision.completedPomodoros} 次专注完成。点击时间开始 ${breakMinutes} 分钟休息。`,
 			);
 		} else {
 			this.timerCompletionNotifier?.notify(
 				'休息结束',
-				'已自动开始下一轮 25 分钟专注。',
+				'点击时间开始下一轮 25 分钟专注。',
 			);
 		}
 		void this.saveSettings();

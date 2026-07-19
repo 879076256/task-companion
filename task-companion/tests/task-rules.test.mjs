@@ -101,6 +101,10 @@ test('an active timer reopens for its current task but rejects another task', ()
 		'reject-switch',
 	);
 	assert.equal(
+		selection.resolveTaskSelectionAction('ready', '^tc-a1b2c3', '^tc-d4e5f6'),
+		'reject-switch',
+	);
+	assert.equal(
 		selection.resolveTaskSelectionAction('finished', '^tc-a1b2c3', '^tc-d4e5f6'),
 		'bind-new',
 	);

@@ -6,6 +6,15 @@ export interface IdleTimerState {
 	status: 'idle';
 }
 
+export interface ReadyTimerState {
+	status: 'ready';
+	sessionId: string;
+	mode: TimerMode;
+	durationSeconds: number;
+	subtaskId: string | null;
+	purpose?: 'break';
+}
+
 interface TimerSession {
 	sessionId: string;
 	mode: TimerMode;
@@ -36,6 +45,7 @@ export interface FinishedTimerState extends TimerSession {
 export type ActiveTimerState = RunningTimerState | PausedTimerState;
 export type TimerState =
 	| IdleTimerState
+	| ReadyTimerState
 	| RunningTimerState
 	| PausedTimerState
 	| FinishedTimerState;
@@ -44,6 +54,14 @@ export interface StartTimerInput {
 	mode: TimerMode;
 	durationSeconds?: number;
 	nowMs: number;
+	sessionId: string;
+	subtaskId?: string | null;
+	purpose?: TimerPurpose;
+}
+
+export interface PrepareTimerInput {
+	mode: TimerMode;
+	durationSeconds?: number;
 	sessionId: string;
 	subtaskId?: string | null;
 	purpose?: TimerPurpose;

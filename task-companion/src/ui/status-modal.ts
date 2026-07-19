@@ -17,7 +17,7 @@ export class StatusModal extends Modal {
 		this.removeBackButton = installModalBackButton(this, null);
 		this.setTitle(this.pluginName);
 		this.contentEl.createEl('p', {
-			text: 'Task Companion 1.1.0 已正常加载。',
+			text: 'Task Companion 1.1.1 已正常加载。',
 		});
 		if (this.showTechnicalDetails) {
 			this.contentEl.createEl('p', { text: 'Plugin ID: task-companion' });

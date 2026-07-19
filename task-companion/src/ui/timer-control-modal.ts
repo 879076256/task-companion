@@ -123,7 +123,11 @@ export class TimerControlModal extends Modal {
 					.setButtonText('开始')
 					.onClick(() => {
 						const state = this.timer.getState();
-						if (state.status === 'idle' || state.status === 'finished') {
+						if (
+							state.status === 'idle' ||
+							state.status === 'ready' ||
+							state.status === 'finished'
+						) {
 							if (selectedMode === 'custom' && customDuration === null) {
 								new Notice('请输入 1–1440 之间的整数分钟。');
 								return;
@@ -196,6 +200,12 @@ export class TimerControlModal extends Modal {
 			case 'idle':
 				this.statusEl.textContent = '任务空闲中';
 				break;
+			case 'ready':
+				this.statusEl.textContent =
+					state.purpose === 'break'
+						? '休息已准备，请点击开始'
+						: '专注已准备，请点击开始';
+				break;
 			case 'running':
 				this.statusEl.textContent =
 					state.purpose === 'break' ? '正在休息' : '正在专注';
@@ -213,7 +223,5 @@ export class TimerControlModal extends Modal {
 }
 
 function formatDuration(seconds: number): string {
-	const hours = Math.floor(seconds / 3_600);
-	const minutes = Math.floor((seconds % 3_600) / 60);
-	return hours > 0 ? `${hours} 小时 ${minutes} 分钟` : `${minutes} 分钟`;
+	return `${Math.floor(Math.max(0, seconds) / 60)}分钟`;
 }

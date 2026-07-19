@@ -9,6 +9,7 @@ import {
 import { ExecutionSession, executionSessionFromTimer } from '../core/sessions/model';
 import {
 	createIdleState,
+	prepareTimer,
 	startTimer,
 	pauseTimer,
 	resumeTimer,
@@ -68,7 +69,11 @@ export class TimerService {
 	}
 
 	clearTask(): void {
-		if (this.state.status === 'running' || this.state.status === 'paused') {
+		if (
+			this.state.status === 'running' ||
+			this.state.status === 'paused' ||
+			this.state.status === 'ready'
+		) {
 			throw new Error('Cannot clear the task during an active timer.');
 		}
 		const changed =
@@ -83,7 +88,11 @@ export class TimerService {
 	}
 
 	bindSubtask(subtaskId: string | null): void {
-		if (this.state.status === 'running' || this.state.status === 'paused') {
+		if (
+			this.state.status === 'running' ||
+			this.state.status === 'paused' ||
+			this.state.status === 'ready'
+		) {
 			throw new Error('Cannot change execution target during an active timer.');
 		}
 		if (subtaskId !== null && subtaskId.length === 0) {
@@ -144,6 +153,27 @@ export class TimerService {
 		if (result.ok) {
 			this.state = result.state;
 			this.startTicking();
+			this.notifyAll();
+			this.requestPersistence();
+		}
+		return result;
+	}
+
+	prepare(
+		mode: TimerMode,
+		durationSeconds?: number,
+		purpose: TimerPurpose = 'focus',
+	): TimerTransition {
+		const result = prepareTimer(this.state, {
+			mode,
+			durationSeconds,
+			purpose,
+			sessionId: crypto.randomUUID(),
+			subtaskId: this.currentSubtaskId,
+		});
+		if (result.ok) {
+			this.state = result.state;
+			this.stopTicking();
 			this.notifyAll();
 			this.requestPersistence();
 		}

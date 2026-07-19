@@ -14,9 +14,9 @@ npm test
 
 构建生成的 `main.js` 只用于本地验证，不纳入 Git。开发安装脚本只写入仓库相邻的 `test-vault/`。
 
-## 1.1.0 发布构建
+## 1.1.1 发布构建
 
-Task Companion 1.1.0 作者为 `teacher Zhang`，仅承诺 Obsidian 桌面端。
+Task Companion 1.1.1 作者为 `teacher Zhang`，仅承诺 Obsidian 桌面端。
 
 ```bash
 npm run build:release

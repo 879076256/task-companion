@@ -1,4 +1,4 @@
-# Task Companion 1.1.0 安装与回滚
+# Task Companion 1.1.1 安装与回滚
 
 ## 适用范围
 
@@ -22,8 +22,8 @@ npm run build:release
 
 生成：
 
-- `release/task-companion-1.1.0.zip`
-- `release/task-companion-1.1.0/` 三文件目录
+- `release/task-companion-1.1.1.zip`
+- `release/task-companion-1.1.1/` 三文件目录
 - `release/SHA256SUMS-1.1.0.txt`
 
 在 `task-companion/release/` 中可用 macOS 自带命令核对：

@@ -1,6 +1,8 @@
 import {
 	FinishedTimerState,
 	PausedTimerState,
+	PrepareTimerInput,
+	ReadyTimerState,
 	RunningTimerState,
 	StartTimerInput,
 	TimerMode,
@@ -25,20 +27,51 @@ export function startTimer(
 		return { ok: false, state, error: 'active-session' };
 	}
 
-	const durationSeconds = resolveDurationSeconds(input);
+	const preparedInput = state.status === 'ready'
+		? {
+				mode: state.mode,
+				durationSeconds: state.durationSeconds,
+				sessionId: state.sessionId,
+				subtaskId: state.subtaskId,
+				purpose: state.purpose,
+			}
+		: input;
+	const durationSeconds = resolveDurationSeconds(preparedInput);
 	if (durationSeconds === null) {
 		return { ok: false, state, error: 'invalid-duration' };
 	}
 
 	const nextState: RunningTimerState = {
 		status: 'running',
-		sessionId: input.sessionId,
-		mode: input.mode,
+		sessionId: preparedInput.sessionId,
+		mode: preparedInput.mode,
 		durationSeconds,
 		startedAtMs: input.nowMs,
 		pausedDurationMs: 0,
-		subtaskId: input.subtaskId ?? null,
+		subtaskId: preparedInput.subtaskId ?? null,
 		endsAtMs: input.nowMs + durationSeconds * 1_000,
+		...(preparedInput.purpose === 'break' ? { purpose: 'break' as const } : {}),
+	};
+	return { ok: true, state: nextState };
+}
+
+export function prepareTimer(
+	state: TimerState,
+	input: PrepareTimerInput,
+): TimerTransition {
+	if (state.status === 'running' || state.status === 'paused') {
+		return { ok: false, state, error: 'active-session' };
+	}
+	const durationSeconds = resolveDurationSeconds(input);
+	if (durationSeconds === null) {
+		return { ok: false, state, error: 'invalid-duration' };
+	}
+	const nextState: ReadyTimerState = {
+		status: 'ready',
+		sessionId: input.sessionId,
+		mode: input.mode,
+		durationSeconds,
+		subtaskId: input.subtaskId ?? null,
 		...(input.purpose === 'break' ? { purpose: 'break' as const } : {}),
 	};
 	return { ok: true, state: nextState };
@@ -130,6 +163,8 @@ export function getRemainingSeconds(state: TimerState, nowMs: number): number {
 	switch (state.status) {
 		case 'idle':
 			return PRESET_SECONDS['focus-25'];
+		case 'ready':
+			return state.durationSeconds;
 		case 'running':
 			return Math.max(0, Math.ceil((state.endsAtMs - nowMs) / 1_000));
 		case 'paused':
@@ -139,7 +174,9 @@ export function getRemainingSeconds(state: TimerState, nowMs: number): number {
 	}
 }
 
-function resolveDurationSeconds(input: StartTimerInput): number | null {
+function resolveDurationSeconds(
+	input: Pick<StartTimerInput, 'mode' | 'durationSeconds'>,
+): number | null {
 	const seconds =
 		input.mode === 'custom' ? input.durationSeconds : PRESET_SECONDS[input.mode];
 	return typeof seconds === 'number' &&
