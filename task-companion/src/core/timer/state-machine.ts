@@ -39,6 +39,7 @@ export function startTimer(
 		pausedDurationMs: 0,
 		subtaskId: input.subtaskId ?? null,
 		endsAtMs: input.nowMs + durationSeconds * 1_000,
+		...(input.purpose === 'break' ? { purpose: 'break' as const } : {}),
 	};
 	return { ok: true, state: nextState };
 }
@@ -63,6 +64,7 @@ export function pauseTimer(state: TimerState, nowMs: number): TimerTransition {
 		subtaskId: state.subtaskId,
 		pausedAtMs: nowMs,
 		remainingSeconds,
+		...(state.purpose === 'break' ? { purpose: 'break' as const } : {}),
 	};
 	return { ok: true, state: nextState };
 }
@@ -82,6 +84,7 @@ export function resumeTimer(state: TimerState, nowMs: number): TimerTransition {
 			state.pausedDurationMs + Math.max(0, nowMs - state.pausedAtMs),
 		subtaskId: state.subtaskId,
 		endsAtMs: nowMs + state.remainingSeconds * 1_000,
+		...(state.purpose === 'break' ? { purpose: 'break' as const } : {}),
 	};
 	return { ok: true, state: nextState };
 }
@@ -107,6 +110,7 @@ export function finishTimerEarly(
 		subtaskId: state.subtaskId,
 		endedAtMs: nowMs,
 		completion: 'early',
+		...(state.purpose === 'break' ? { purpose: 'break' as const } : {}),
 	};
 	return { ok: true, state: nextState };
 }
@@ -156,5 +160,6 @@ function completeNormally(state: RunningTimerState): FinishedTimerState {
 		subtaskId: state.subtaskId,
 		endedAtMs: state.endsAtMs,
 		completion: 'normal',
+		...(state.purpose === 'break' ? { purpose: 'break' as const } : {}),
 	};
 }

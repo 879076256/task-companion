@@ -19,6 +19,7 @@ async function loadTimerModule(entryPoint) {
 const machine = await loadTimerModule('../src/core/timer/state-machine.ts');
 const serialization = await loadTimerModule('../src/core/timer/serialization.ts');
 const timerServiceModule = await loadTimerModule('../src/services/timer-service.ts');
+const pomodoro = await loadTimerModule('../src/core/timer/pomodoro-cycle.ts');
 
 test('starts a 25 minute timer using an absolute end timestamp', () => {
 	const result = machine.startTimer(machine.createIdleState(), {
@@ -81,6 +82,100 @@ test('supports custom duration and distinguishes normal and early completion', (
 	assert.equal(machine.resetTimer(early).status, 'idle');
 });
 
+test('pomodoro cycle uses a long break after every third completed 25 minute focus', () => {
+	for (const [completedPomodoros, expectedSeconds] of [
+		[0, 300],
+		[1, 300],
+		[2, 900],
+		[3, 300],
+		[4, 300],
+		[5, 900],
+	]) {
+		const decision = pomodoro.resolvePomodoroCompletion({
+			status: 'finished',
+			sessionId: `focus-${completedPomodoros}`,
+			mode: 'focus-25',
+			durationSeconds: 1_500,
+			startedAtMs: 0,
+			pausedDurationMs: 0,
+			subtaskId: null,
+			endedAtMs: 1_500_000,
+			completion: 'normal',
+		}, completedPomodoros);
+		assert.equal(decision.completedPomodoros, completedPomodoros + 1);
+		assert.equal(decision.completedStage, 'focus');
+		assert.deepEqual(decision.next, {
+			mode: 'custom',
+			durationSeconds: expectedSeconds,
+			purpose: 'break',
+		});
+	}
+});
+
+test('a completed break returns to 25 minute focus while early or other timers do not chain', () => {
+	const breakDecision = pomodoro.resolvePomodoroCompletion({
+		status: 'finished',
+		sessionId: 'break',
+		mode: 'custom',
+		durationSeconds: 300,
+		startedAtMs: 0,
+		pausedDurationMs: 0,
+		subtaskId: null,
+		endedAtMs: 300_000,
+		completion: 'normal',
+		purpose: 'break',
+	}, 2);
+	assert.deepEqual(breakDecision, {
+		completedPomodoros: 2,
+		completedStage: 'break',
+		next: { mode: 'focus-25', purpose: 'focus' },
+	});
+	assert.equal(pomodoro.resolvePomodoroCompletion({
+		status: 'finished',
+		sessionId: 'early',
+		mode: 'focus-25',
+		durationSeconds: 1_500,
+		startedAtMs: 0,
+		pausedDurationMs: 0,
+		subtaskId: null,
+		endedAtMs: 1_000,
+		completion: 'early',
+	}, 2), null);
+	assert.equal(pomodoro.resolvePomodoroCompletion({
+		status: 'finished',
+		sessionId: 'fifty',
+		mode: 'focus-50',
+		durationSeconds: 3_000,
+		startedAtMs: 0,
+		pausedDurationMs: 0,
+		subtaskId: null,
+		endedAtMs: 3_000_000,
+		completion: 'normal',
+	}, 2), null);
+});
+
+test('break timers emit stage completion but never task execution sessions', () => {
+	const service = new timerServiceModule.TimerService({ capture() {} });
+	const sessions = [];
+	const completions = [];
+	service.bindTask('^tc-aabbcc');
+	service.onSessionCompleted((session) => sessions.push(session));
+	service.onTimerCompleted((state) => completions.push(state));
+	service.state = machine.startTimer(machine.createIdleState(), {
+		mode: 'custom',
+		durationSeconds: 300,
+		nowMs: 0,
+		sessionId: 'rest',
+		purpose: 'break',
+	}).state;
+	service.state = machine.reconcileTimer(service.state, 300_000);
+	service.emitCompleted(service.state);
+
+	assert.equal(completions.length, 1);
+	assert.equal(completions[0].purpose, 'break');
+	assert.deepEqual(sessions, []);
+});
+
 test('restores running and paused sessions across reloads', () => {
 	const running = machine.startTimer(machine.createIdleState(), {
 		mode: 'focus-25',
@@ -98,6 +193,19 @@ test('restores running and paused sessions across reloads', () => {
 	assert.deepEqual(serialization.restoreTimerState({ status: 'running' }, 0), {
 		status: 'idle',
 	});
+
+	const resting = machine.startTimer(machine.createIdleState(), {
+		mode: 'custom',
+		durationSeconds: 300,
+		nowMs: 10_000,
+		sessionId: 'resting',
+		purpose: 'break',
+	}).state;
+	assert.deepEqual(serialization.restoreTimerState(resting, 20_000), resting);
+	assert.equal(serialization.restoreTimerState({
+		...running,
+		purpose: 'unknown',
+	}, 2_000).purpose, undefined);
 });
 
 test('rejects duplicate starts while running or paused', () => {
@@ -155,6 +263,23 @@ test('timer control exposes a validated custom minute input', async () => {
 	assert.match(source, /自由时长（分钟）/u);
 	assert.match(source, /minutes >= 1 && minutes <= 1_440/u);
 	assert.match(source, /customDuration \* 60/u);
+});
+
+test('completion alert is wired to modal, chime, background notification and automatic cycling', async () => {
+	const [main, notifier] = await Promise.all([
+		readFile(new URL('../src/main.ts', import.meta.url), 'utf8'),
+		readFile(new URL('../src/ui/timer-completion-notifier.ts', import.meta.url), 'utf8'),
+	]);
+	assert.match(main, /onTimerCompleted/u);
+	assert.match(main, /resolvePomodoroCompletion/u);
+	assert.match(main, /decision\.next\.purpose/u);
+	assert.match(main, /专注完成/u);
+	assert.match(main, /休息结束/u);
+	assert.match(notifier, /new AudioContext\(\)/u);
+	assert.match(notifier, /createOscillator/u);
+	assert.match(notifier, /window\.Notification/u);
+	assert.match(notifier, /document\.hasFocus\(\)/u);
+	assert.match(notifier, /知道了/u);
 });
 
 test('timer service notifies homepage listeners when task identity or target changes', () => {

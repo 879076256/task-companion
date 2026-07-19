@@ -469,7 +469,7 @@ test('Phase 7.3 visual system keeps subtasks on one row and normalizes every mod
 	assert.doesNotMatch(embedded, /⚙️|⏹|↺|🔗/u);
 });
 
-test('confirmed completion owns review eligibility while timer endings save silently', async () => {
+test('confirmed completion owns review eligibility while timer endings avoid reflection forms', async () => {
 	const [
 		main,
 		embedded,

@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 
 const projectRoot = new URL('../', import.meta.url);
 const repositoryRoot = new URL('../../', import.meta.url);
-const expectedVersion = '1.0.1';
+const expectedVersion = '1.1.0';
 const execFileAsync = promisify(execFile);
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const sha256 = (content) => createHash('sha256').update(content).digest('hex');
@@ -45,6 +45,7 @@ test('release metadata is stable and desktop-only', async () => {
 	assert.equal(manifest.isDesktopOnly, true);
 	assert.deepEqual(versions, {
 		'1.0.0': manifest.minAppVersion,
+		'1.0.1': manifest.minAppVersion,
 		[expectedVersion]: manifest.minAppVersion,
 	});
 	assert.doesNotMatch(manifest.description, /obsidian/iu);

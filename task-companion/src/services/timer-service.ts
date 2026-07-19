@@ -1,5 +1,7 @@
 import {
 	TimerMode,
+	FinishedTimerState,
+	TimerPurpose,
 	TimerState,
 	TimerTransition,
 	StartTimerInput,
@@ -20,6 +22,7 @@ import { ErrorLogger } from './error-logger';
 
 export type TimerListener = (state: TimerState) => void;
 export type SessionCompletedListener = (session: ExecutionSession) => void;
+export type TimerCompletedListener = (state: FinishedTimerState) => void;
 
 export class TimerService {
 	private state: TimerState = createIdleState();
@@ -30,6 +33,7 @@ export class TimerService {
 	private currentSubtaskId: string | null = null;
 	private persistenceHook: (() => void) | null = null;
 	private sessionCompletedHook: SessionCompletedListener | null = null;
+	private timerCompletedHook: TimerCompletedListener | null = null;
 	private readonly emittedSessionIds = new Set<string>();
 
 	constructor(logger: ErrorLogger) {
@@ -111,6 +115,10 @@ export class TimerService {
 		this.sessionCompletedHook = hook;
 	}
 
+	onTimerCompleted(hook: TimerCompletedListener): void {
+		this.timerCompletedHook = hook;
+	}
+
 	subscribe(listener: TimerListener): () => void {
 		this.listeners.add(listener);
 		return () => {
@@ -118,13 +126,19 @@ export class TimerService {
 		};
 	}
 
-	start(mode: TimerMode, nowMs: number, durationSeconds?: number): TimerTransition {
+	start(
+		mode: TimerMode,
+		nowMs: number,
+		durationSeconds?: number,
+		purpose: TimerPurpose = 'focus',
+	): TimerTransition {
 		const input: StartTimerInput = {
 			mode,
 			nowMs,
 			sessionId: crypto.randomUUID(),
 			subtaskId: this.currentSubtaskId,
 			durationSeconds,
+			purpose,
 		};
 		const result = startTimer(this.state, input);
 		if (result.ok) {
@@ -204,6 +218,7 @@ export class TimerService {
 		this.listeners.clear();
 		this.persistenceHook = null;
 		this.sessionCompletedHook = null;
+		this.timerCompletedHook = null;
 	}
 
 	private startTicking(): void {
@@ -249,20 +264,23 @@ export class TimerService {
 	}
 
 	private emitCompleted(state: TimerState): void {
-		if (
-			state.status !== 'finished' ||
-			this.currentTaskId === null ||
-			this.emittedSessionIds.has(state.sessionId)
-		) {
+		if (state.status !== 'finished' || this.emittedSessionIds.has(state.sessionId)) {
 			return;
 		}
 		this.emittedSessionIds.add(state.sessionId);
+		if (state.purpose !== 'break' && this.currentTaskId !== null) {
+			try {
+				this.sessionCompletedHook?.(
+					executionSessionFromTimer(state, this.currentTaskId),
+				);
+			} catch (error) {
+				this.logger.capture('session completion listener', error);
+			}
+		}
 		try {
-			this.sessionCompletedHook?.(
-				executionSessionFromTimer(state, this.currentTaskId),
-			);
+			this.timerCompletedHook?.(state);
 		} catch (error) {
-			this.logger.capture('session completion listener', error);
+			this.logger.capture('timer completion listener', error);
 		}
 	}
 }

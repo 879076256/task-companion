@@ -4,12 +4,14 @@ export interface TaskCompanionSettings {
 	showTechnicalDetails: boolean;
 	preferredTimerMode: TimerMode;
 	customTimerMinutes: number;
+	completedPomodoros: number;
 }
 
 export const DEFAULT_SETTINGS: TaskCompanionSettings = {
 	showTechnicalDetails: false,
 	preferredTimerMode: 'focus-25',
 	customTimerMinutes: 25,
+	completedPomodoros: 0,
 };
 
 export function normalizeSettings(value: unknown): TaskCompanionSettings {
@@ -29,6 +31,9 @@ export function normalizeSettings(value: unknown): TaskCompanionSettings {
 		customTimerMinutes: isCustomMinutes(candidate.customTimerMinutes)
 			? candidate.customTimerMinutes
 			: DEFAULT_SETTINGS.customTimerMinutes,
+		completedPomodoros: isCompletedPomodoroCount(candidate.completedPomodoros)
+			? candidate.completedPomodoros
+			: DEFAULT_SETTINGS.completedPomodoros,
 	};
 }
 
@@ -38,4 +43,8 @@ function isTimerMode(value: unknown): value is TimerMode {
 
 function isCustomMinutes(value: unknown): value is number {
 	return Number.isSafeInteger(value) && Number(value) >= 1 && Number(value) <= 1_440;
+}
+
+function isCompletedPomodoroCount(value: unknown): value is number {
+	return Number.isSafeInteger(value) && Number(value) >= 0;
 }

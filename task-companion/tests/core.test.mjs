@@ -22,6 +22,7 @@ test('settings normalization validates the toggle and persisted timer preference
 		showTechnicalDetails: false,
 		preferredTimerMode: 'focus-25',
 		customTimerMinutes: 25,
+		completedPomodoros: 0,
 	};
 	assert.deepEqual(normalizeSettings(undefined), defaults);
 	assert.deepEqual(normalizeSettings({ showTechnicalDetails: true }), {
@@ -33,13 +34,20 @@ test('settings normalization validates the toggle and persisted timer preference
 			showTechnicalDetails: 'yes',
 			preferredTimerMode: 'custom',
 			customTimerMinutes: 90,
+			completedPomodoros: 8,
 		}),
-		{ ...defaults, preferredTimerMode: 'custom', customTimerMinutes: 90 },
+		{
+			...defaults,
+			preferredTimerMode: 'custom',
+			customTimerMinutes: 90,
+			completedPomodoros: 8,
+		},
 	);
 	assert.deepEqual(
 		normalizeSettings({ preferredTimerMode: 'invalid', customTimerMinutes: 0 }),
 		defaults,
 	);
+	assert.deepEqual(normalizeSettings({ completedPomodoros: -1 }), defaults);
 });
 
 test('error logger emits a scoped, predictable message', async () => {

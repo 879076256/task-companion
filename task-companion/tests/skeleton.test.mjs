@@ -9,7 +9,7 @@ test('manifest identifies the isolated Task Companion skeleton', async () => {
 
 	assert.equal(manifest.id, 'task-companion');
 	assert.equal(manifest.name, 'Task Companion');
-	assert.equal(manifest.version, '1.0.1');
+	assert.equal(manifest.version, '1.1.0');
 	assert.equal(manifest.author, 'teacher Zhang');
 	assert.equal(manifest.isDesktopOnly, true);
 });
@@ -64,6 +64,6 @@ test('release test modal reports the current product version without skeleton co
 		'utf8',
 	);
 
-	assert.match(source, /Task Companion 1\.0\.1 已正常加载。/u);
+	assert.match(source, /Task Companion 1\.1\.0 已正常加载。/u);
 	assert.doesNotMatch(source, /phase 1|skeleton/iu);
 });

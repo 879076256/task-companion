@@ -1,8 +1,8 @@
-# Task Companion 1.0.1 安装与回滚
+# Task Companion 1.1.0 安装与回滚
 
 ## 适用范围
 
-- 插件版本：`1.0.1`
+- 插件版本：`1.1.0`
 - 作者：`teacher Zhang`
 - 平台：仅 Obsidian 桌面端
 - 最低 Obsidian 版本：`1.1.0`
@@ -22,14 +22,14 @@ npm run build:release
 
 生成：
 
-- `release/task-companion-1.0.1.zip`
-- `release/task-companion-1.0.1/` 三文件目录
-- `release/SHA256SUMS-1.0.1.txt`
+- `release/task-companion-1.1.0.zip`
+- `release/task-companion-1.1.0/` 三文件目录
+- `release/SHA256SUMS-1.1.0.txt`
 
 在 `task-companion/release/` 中可用 macOS 自带命令核对：
 
 ```bash
-shasum -a 256 -c SHA256SUMS-1.0.1.txt
+shasum -a 256 -c SHA256SUMS-1.1.0.txt
 ```
 
 ZIP 根目录必须恰好包含 `main.js`、`manifest.json`、`styles.css`。发现 `data.json`、源码、测试数据、日志或 source map 时停止安装。

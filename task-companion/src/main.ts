@@ -38,7 +38,8 @@ import {
 import type { ReviewEvent } from './core/reviews/model';
 import { createSubtaskReviewEvent } from './core/reviews/subtask-review';
 import type { Subtask } from './core/subtasks/model';
-import type { TimerState } from './core/timer/model';
+import type { FinishedTimerState, TimerState } from './core/timer/model';
+import { resolvePomodoroCompletion } from './core/timer/pomodoro-cycle';
 import type { ParsedTask, SelectedTask } from './core/tasks/task-rules';
 import { buildHomeReminderGroups } from './core/dashboard/home-reminders';
 import { resolveTaskSelectionAction } from './core/tasks/task-selection';
@@ -74,6 +75,7 @@ import { SessionHistoryModal } from './ui/session-history-modal';
 import { SessionReflectionModal } from './ui/session-reflection-modal';
 import { SubtaskManagerModal } from './ui/subtask-manager-modal';
 import { TimerControlModal } from './ui/timer-control-modal';
+import { TimerCompletionNotifier } from './ui/timer-completion-notifier';
 import { registerEmbeddedCodeBlocks } from './ui/embedded-code-block';
 import { TaskSelectionModal } from './ui/task-selection-modal';
 import { TemplateDecisionModal } from './ui/template-decision-modal';
@@ -93,6 +95,7 @@ export default class TaskCompanionPlugin extends Plugin {
 	private readonly activeModals = new Set<Modal>();
 	private readonly logger = new ErrorLogger(new ConsoleLogSink());
 	private timerService: TimerService | null = null;
+	private timerCompletionNotifier: TimerCompletionNotifier | null = null;
 	private taskScanner: TaskScanner | null = null;
 	private dashboardTaskService: DashboardTaskService | null = null;
 	private sessionService: SessionService | null = null;
@@ -111,6 +114,10 @@ export default class TaskCompanionPlugin extends Plugin {
 			const saved: unknown = await this.loadData();
 			this.settings = normalizeSettings(saved);
 			this.timerService = new TimerService(this.logger);
+			this.timerCompletionNotifier = new TimerCompletionNotifier(
+				this.app,
+				(scope, error) => this.logger.capture(scope, error),
+			);
 			this.taskScanner = new TaskScanner(new ObsidianTaskVault(this.app.vault));
 			this.dashboardTaskService = new DashboardTaskService(this.taskScanner);
 			this.sessionService = new SessionService(
@@ -177,6 +184,9 @@ export default class TaskCompanionPlugin extends Plugin {
 			}
 			this.timerService.onSessionCompleted((session) => {
 				void this.handleCompletedSession(session);
+			});
+			this.timerService.onTimerCompleted((state) => {
+				this.handleCompletedTimer(state);
 			});
 			if (isRecord(saved)) {
 				this.timerService.restore(
@@ -327,6 +337,8 @@ export default class TaskCompanionPlugin extends Plugin {
 		}
 		this.activeModals.clear();
 		this.timerService?.dispose();
+		this.timerCompletionNotifier?.dispose();
+		this.timerCompletionNotifier = null;
 		this.extensionEvents.clear();
 		this.api = null;
 	}
@@ -851,6 +863,40 @@ export default class TaskCompanionPlugin extends Plugin {
 		this.openSessionReflection(session);
 	}
 
+	private handleCompletedTimer(state: FinishedTimerState): void {
+		if (!this.timerService) return;
+		const decision = resolvePomodoroCompletion(
+			state,
+			this.settings.completedPomodoros,
+		);
+		if (!decision) return;
+		this.settings.completedPomodoros = decision.completedPomodoros;
+		const transition = this.timerService.start(
+			decision.next.mode,
+			Date.now(),
+			decision.next.durationSeconds,
+			decision.next.purpose,
+		);
+		if (!transition.ok) {
+			new Notice('本轮计时已完成，但下一阶段未能自动开始。');
+			void this.saveSettings();
+			return;
+		}
+		if (decision.completedStage === 'focus') {
+			const breakMinutes = (decision.next.durationSeconds ?? 0) / 60;
+			this.timerCompletionNotifier?.notify(
+				'专注完成',
+				`第 ${decision.completedPomodoros} 次专注完成，已自动开始 ${breakMinutes} 分钟休息。`,
+			);
+		} else {
+			this.timerCompletionNotifier?.notify(
+				'休息结束',
+				'已自动开始下一轮 25 分钟专注。',
+			);
+		}
+		void this.saveSettings();
+	}
+
 	private async openCompletionReflection(
 		taskId: string,
 		subtaskId: string | null,
@@ -1140,6 +1186,7 @@ export default class TaskCompanionPlugin extends Plugin {
 		if (state.status === 'running' && previous.status === 'paused') {
 			this.emitExtensionEvent('timer-resumed', base);
 		} else if (state.status === 'running' && previous.status !== 'running') {
+			this.timerCompletionNotifier?.primeAudio();
 			this.emitExtensionEvent('timer-started', base);
 		} else if (state.status === 'paused' && previous.status === 'running') {
 			this.emitExtensionEvent('timer-paused', base);

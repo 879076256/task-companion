@@ -809,13 +809,20 @@ class DataViewChild extends MarkdownRenderChild {
 	private updateCurrentTimer(): void {
 		if (!this.currentTimerStatusEl || !this.currentTimerValueEl) return;
 		const state = this.services.timerService.getState();
-		const labels = {
-			idle: '点击时间开始',
-			running: '正在专注 · 点击暂停',
-			paused: '已暂停 · 点击继续',
-			finished: '本次已结束 · 点击重新开始',
-		} as const;
-		this.currentTimerStatusEl.setText(labels[state.status]);
+		const label = state.status === 'idle'
+			? '点击时间开始'
+			: state.status === 'running'
+				? state.purpose === 'break'
+					? '正在休息 · 点击暂停'
+					: '正在专注 · 点击暂停'
+				: state.status === 'paused'
+					? state.purpose === 'break'
+						? '休息已暂停 · 点击继续'
+						: '已暂停 · 点击继续'
+					: state.purpose === 'break'
+						? '休息已结束'
+						: '本次已结束 · 点击重新开始';
+		this.currentTimerStatusEl.setText(label);
 		this.currentTimerValueEl.toggleClass(
 			'is-running',
 			state.status === 'running',

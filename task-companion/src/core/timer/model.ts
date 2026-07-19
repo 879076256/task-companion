@@ -1,5 +1,6 @@
 export type TimerMode = 'focus-25' | 'focus-50' | 'custom';
 export type TimerCompletion = 'normal' | 'early';
+export type TimerPurpose = 'focus' | 'break';
 
 export interface IdleTimerState {
 	status: 'idle';
@@ -12,6 +13,7 @@ interface TimerSession {
 	startedAtMs: number;
 	pausedDurationMs: number;
 	subtaskId: string | null;
+	purpose?: 'break';
 }
 
 export interface RunningTimerState extends TimerSession {
@@ -44,6 +46,7 @@ export interface StartTimerInput {
 	nowMs: number;
 	sessionId: string;
 	subtaskId?: string | null;
+	purpose?: TimerPurpose;
 }
 
 export type TimerTransitionError =

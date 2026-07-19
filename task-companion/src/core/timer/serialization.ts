@@ -69,6 +69,7 @@ function readSession(value: Record<string, unknown>): {
 	startedAtMs: number;
 	pausedDurationMs: number;
 	subtaskId: string | null;
+	purpose?: 'break';
 } | null {
 	if (
 		typeof value.sessionId !== 'string' ||
@@ -90,6 +91,7 @@ function readSession(value: Record<string, unknown>): {
 			typeof value.subtaskId === 'string' && value.subtaskId.length > 0
 				? value.subtaskId
 				: null,
+		...(value.purpose === 'break' ? { purpose: 'break' as const } : {}),
 	};
 }
 

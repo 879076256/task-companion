@@ -197,13 +197,16 @@ export class TimerControlModal extends Modal {
 				this.statusEl.textContent = '任务空闲中';
 				break;
 			case 'running':
-				this.statusEl.textContent = '正在专注';
+				this.statusEl.textContent =
+					state.purpose === 'break' ? '正在休息' : '正在专注';
 				break;
 			case 'paused':
-				this.statusEl.textContent = '已暂停';
+				this.statusEl.textContent =
+					state.purpose === 'break' ? '休息已暂停' : '已暂停';
 				break;
 			case 'finished':
-				this.statusEl.textContent = '专注完成';
+				this.statusEl.textContent =
+					state.purpose === 'break' ? '休息结束' : '专注完成';
 				break;
 		}
 	}
